@@ -74,6 +74,28 @@ test('cached metadata handoff cannot park the aggregate download limiter', async
   assert.match(build, /'streaming_bandwidth_', '--', '--ignored', '--test-threads=1'/);
 });
 
+test('encrypted resume retains complete ciphertext pages and launch errors identify incomplete images (#248)', async () => {
+  const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
+  const resumeIndex = lock.patches.findIndex(p => p.file === 'xodus-encrypted-resume.patch');
+  const launchIndex = lock.patches.findIndex(p => p.file === 'xodus-launch-image-errors.patch');
+  assert.ok(resumeIndex >= 0 && launchIndex > resumeIndex);
+  const resume = await fs.readFile('assets/xodus-encrypted-resume.patch', 'utf8');
+  for (const name of ['streaming_resume_completed_encrypted_image_preserves_ciphertext_tail',
+    'streaming_resume_repairs_old_encrypted_tail_with_actual_range_download',
+    'streaming_repair_selection_preserves_unchanged_files_and_only_targets_current_package',
+    'streaming_encrypted_download_and_partial_resume_keep_exact_ciphertext_for_launch_decryption',
+    'streaming_plain_output_remains_unpadded_and_short_ciphertext_returns_error']) assert.ok(resume.includes(name), name);
+  assert.ok(resume.includes('content.stored_length()?'));
+  assert.ok(resume.includes('offset = content.length / page_size * page_size;'));
+  const launch = await fs.readFile('assets/xodus-launch-image-errors.patch', 'utf8');
+  for (const name of ['launch_image_preflight_rejects_incomplete_ciphertext_with_file_and_size_without_writing',
+    'launch_image_preflight_accepts_valid_plain_and_padded_images_without_changes',
+    'launch_images_keep_owned_descriptors_with_inheritance_enabled']) assert.ok(launch.includes(name), name);
+  assert.match(launch, /^-\s*\.unwrap\(\);$/m);
+  assert.match(launch, /^\+\s*Err\(error\) => \{/m);
+  assert.doesNotMatch(resume + launch, /diff --git a\/.*(?:tokens\/|login\.rs|license\.rs|package_plan\.rs)/);
+});
+
 test('backend source and ordered patch hashes are locked', async () => {
   const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
   assert.equal(lock.schema, 1);
