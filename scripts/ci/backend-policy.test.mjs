@@ -109,6 +109,21 @@ test('backend source and ordered patch hashes are locked', async () => {
   }
 });
 
+test('first wallet creation is explicit, native-prompt only and preserves existing collections', async () => {
+  const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
+  const index = lock.patches.findIndex(p => p.file === 'xodus-keyring-create.patch');
+  assert.ok(index > lock.patches.findIndex(p => p.file === 'xodus-keyring-persistence.patch'));
+  const patch = await fs.readFile('assets/xodus-keyring-create.patch', 'utf8');
+  for (const text of ['KeyringCreate', 'CreateCollection', 'if !collections.is_empty()', 'current_owner != owner',
+    'keyring_create_never_replaces_existing_collections_or_creates_from_unlock',
+    'keyring_create_native_prompt_rechecks_default_and_lock_state',
+    'keyring_create_cancel_timeout_and_foreign_completion_are_bounded']) assert.ok(patch.includes(text),text);
+  assert.doesNotMatch(patch, /^\+.*(?:GetSecret|SearchItems|SetSecret|SetAlias|ensure_device_credentials\(|https:\/\/)/m);
+  const build = await fs.readFile('scripts/build-backend.mjs','utf8');
+  assert.ok(build.includes("'keyring_create_', '--', '--test-threads=1'"));
+  assert.ok(build.includes("'keyring-create'"));
+});
+
 test('wallet unlock is explicit, account-free and private-bus tested', async () => {
   const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
   assert.ok(lock.patches.some(p => p.file === 'xodus-keyring-unlock.patch'));

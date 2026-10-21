@@ -8,6 +8,8 @@ export type KeyringActions = {
   startProvider?: (provider: KdeProvider, env: NodeJS.ProcessEnv, owned: () => Promise<boolean>) => Promise<void>;
   canUnlock?: () => boolean;
   unlock?: () => Promise<string>;
+  canCreate?: () => boolean;
+  create?: () => Promise<string>;
 };
 
 type Execute = (command: string, args: string[]) => Promise<string>;
@@ -56,6 +58,25 @@ export class KeyringSupport {
   /** One visible-launcher startup attempt. Unknown providers stay explicit. */
   startForStartup(): Promise<KeyringStatus> {
     return this.prepare(true);
+  }
+
+  /** Explicit click only. Never replaces a default or another collection. */
+  createCollection(): Promise<KeyringStatus> {
+    return this.starting ??= (async () => {
+      if (this.checking) await this.checking;
+      const before = (await this.inspect()).status;
+      if (before.state !== 'needs-setup' || !before.canCreate || !this.actions.create) return before;
+      try {
+        const result = await this.actions.create();
+        const after = (await this.inspect()).status;
+        if (after.state === 'ready') return after;
+        return { ...after, message: result === 'cancelled' ? 'Wallet setup was cancelled. You can try again when ready.'
+          : result === 'timed-out' ? 'Wallet setup timed out. Check for the system wallet window, then try again.'
+          : result === 'unavailable' ? 'Wallet setup could not be completed. Check the backend diagnostic log and try again.' : after.message };
+      } catch {
+        return { ...before, message: 'Wallet setup could not be completed. Check the backend diagnostic log and try again.' };
+      }
+    })().finally(() => { this.starting = undefined; });
   }
 
   private prepare(automatic: boolean): Promise<KeyringStatus> {
@@ -120,7 +141,16 @@ export class KeyringSupport {
       if (owned) {
         const collection = await this.bus('o', [secretService, serviceObject, 'org.freedesktop.Secret.Service', 'ReadAlias', 's', 'default']);
         if (typeof collection !== 'string' || !/^\/(?:[A-Za-z0-9_]+\/?)*$/.test(collection)) throw Error('Invalid collection');
-        if (collection === '/') return { status: this.status('needs-setup', 'The keyring is running, but has no default wallet. Complete wallet setup in Desktop Mode, then check again.') };
+        if (collection === '/') {
+          const status = this.status('needs-setup', 'The keyring is running, but has no default wallet. Complete wallet setup in Desktop Mode, then check again.');
+          if (this.actions.canCreate?.()) {
+            const collections = await this.bus('v', [secretService, serviceObject, 'org.freedesktop.DBus.Properties', 'Get', 'ss', 'org.freedesktop.Secret.Service', 'Collections']) as { type?: unknown; data?: unknown };
+            if (collections?.type !== 'ao' || !Array.isArray(collections.data) || collections.data.some(p => typeof p !== 'string' || !/^\/(?:[A-Za-z0-9_]+\/?)*$/.test(p))) throw Error('Invalid collections');
+            if (collections.data.length === 0) return { status: { ...status, canCreate: true,
+              message: 'Create a wallet in the system dialog. Choose a password there, or leave it empty if supported. An empty password does not protect saved credentials.' } };
+          }
+          return { status };
+        }
         const property = await this.bus('v', [secretService, collection, 'org.freedesktop.DBus.Properties', 'Get', 'ss', 'org.freedesktop.Secret.Collection', 'Locked']);
         // busctl represents a variant as a nested typed value.
         const value = property as { type?: unknown; data?: unknown };

@@ -16,4 +16,5 @@ it('delivers automatic wallet status and removes exactly its own preload listene
   listener({ sender: 'not exposed' }, status);
   expect(callback).toHaveBeenCalledWith(status);
   dispose(); expect(removeListener).toHaveBeenCalledWith('keyring-state', listener);
+  api.createKeyringCollection(); expect(invoke).toHaveBeenCalledWith('keyring-create');
 });

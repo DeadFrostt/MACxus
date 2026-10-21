@@ -20,6 +20,7 @@ const api: LauncherApi = {
   refreshAccount: () => ipcRenderer.invoke('account-refresh'),
   checkKeyring: () => ipcRenderer.invoke('keyring-check'),
   startKeyring: () => ipcRenderer.invoke('keyring-start'),
+  createKeyringCollection: () => ipcRenderer.invoke('keyring-create'),
   onKeyringStatus: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, status: Parameters<typeof callback>[0]) => callback(status);
     ipcRenderer.on('keyring-state', listener);

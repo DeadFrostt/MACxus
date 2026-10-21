@@ -104,6 +104,13 @@ const accountLibrary = new AccountLibrary((ids, market) => catalog.licensedProdu
 const demoMode = process.env.XODUS_DEMO === '1';
 const walletUnlocker = new WalletUnlocker();
 const keyringSupport = new KeyringSupport(process.env, undefined, process.platform, undefined, {
+  canCreate: () => Boolean(backend?.current.capabilities.commands.includes('keyring-create')),
+  create: () => {
+    if (shutdownStarted || !mainWindow || mainWindow.isDestroyed()) return Promise.resolve('cancelled');
+    if (!backend?.current.capabilities.commands.includes('keyring-create')) return Promise.resolve('unavailable');
+    const handle = mainWindow.getNativeWindowHandle();
+    return walletUnlocker.create(requireBackend('commands'), handle.length >= 4 ? String(handle.readUInt32LE()) : '');
+  },
   startProvider: (provider, environment, owned) => startSessionKeyring(provider, environment, owned,
     backend?.current.capabilities.commands.includes('keyring-session-stop') ? backend.current.binaryPath : undefined),
   canUnlock: () => Boolean(backend?.current.capabilities.commands.includes('keyring-unlock')),
@@ -1127,6 +1134,7 @@ function registerDemoIpc(catalogMarket: () => string): void {
   ipcMain.handle('account-refresh', () => snapshot().auth);
   ipcMain.handle('keyring-check', () => ({ state: 'ready', gameMode: false, canStart: false, message: 'Sample system wallet is running and unlocked. No real keyring is accessed.' }));
   ipcMain.handle('keyring-start', () => ({ state: 'ready', gameMode: false, canStart: false, message: 'Demo mode does not start real services.' }));
+  ipcMain.handle('keyring-create', () => ({ state: 'ready', gameMode: false, canStart: false, message: 'Demo mode does not create real wallets.' }));
   ipcMain.handle('check-launcher-update', () => snapshot().launcherUpdate);
   ipcMain.handle('install-launcher-update', () => {});
   ipcMain.handle('restart-launcher', () => {});
@@ -1216,6 +1224,13 @@ function registerIpc(): void {
     ensureIdle();
     const result = await keyringSupport.start();
     if (result.state === 'ready') void refreshAccount().catch(() => { /* Explicit refresh remains available. */ });
+    return result;
+  });
+  ipcMain.handle('keyring-create', async () => {
+    ensureIdle();
+    if (authState.running) throw new Error('Wait for sign-in to finish.');
+    const result = await keyringSupport.createCollection();
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('keyring-state', result);
     return result;
   });
   ipcMain.handle('check-launcher-update', async () => { await checkLauncherUpdate(); emitSnapshot(); return snapshot().launcherUpdate; });

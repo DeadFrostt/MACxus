@@ -45,6 +45,7 @@ if (!rustc.startsWith(`rustc ${lock.rust} `)) throw Error(`Use the locked Rust t
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus-cli']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'credential_']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'keyring_unlock_', '--', '--test-threads=1']);
+command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'keyring_create_', '--', '--test-threads=1']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'keyring_session_', '--', '--test-threads=1']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'keyring_persistence_', '--', '--test-threads=1']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'content_license_']);
@@ -60,7 +61,7 @@ const cli = path.join(target, 'release/xodus-cli');
 const help = command(cli, ['--help'], true);
 if (authUi === 'electron' && !help.includes('--external-webview-stdio')) throw Error('External sign-in capability missing');
 if (authUi === 'electron' && /lib(?:gtk|webkit|soup|javascriptcore)/i.test(command('readelf', ['-d', cli], true))) throw Error('Headless CLI links a native webview library');
-for (const name of ['account', 'login', 'logout', 'download', 'streaming', 'run', 'resolve-package', 'game-activity', 'achievements', 'keyring-unlock', 'keyring-session-stop']) {
+for (const name of ['account', 'login', 'logout', 'download', 'streaming', 'run', 'resolve-package', 'game-activity', 'achievements', 'keyring-unlock', 'keyring-create', 'keyring-session-stop']) {
   if (!new RegExp(`^\\s{2}${name}\\s{2,}`, 'm').test(help)) throw Error(`Backend lacks ${name}`);
 }
 if (!command(cli, ['run', '--help'], true).includes('--materialize-chain')) throw Error('Launch-chain support missing');
