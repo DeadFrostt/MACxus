@@ -66,11 +66,13 @@ Flatpak version available through Discover. Other browsers are not supported.
 The system keyring (KDE Wallet or GNOME Keyring) stores your Microsoft sign-in
 credentials so you do not need to sign in each time. It must be enabled and
 unlocked, with Secret Service support. The first-run wizard and account Settings can check
-the service and start an installed provider (`busctl` is needed for these checks).
+the service, start it and open the native unlock dialog (`busctl` is needed for these checks).
+If no wallet collection exists, **Create wallet** opens the system setup dialog;
+choose its password there. An empty password does not protect stored credentials.
 On KDE, enable the wallet in **System Settings → KDE Wallet** if it was disabled.
-Complete wallet setup and unlock it in Desktop Mode before using Steam Game Mode,
-where password prompts may not be visible. Keep the wallet password enabled;
-Nexus does not change passwords, reset credentials or install a provider.
+In Game Mode, Nexus can start a supported KDE wallet and show its native password
+dialog. If setup or unlocking is unavailable, complete it in Desktop Mode.
+Nexus does not change existing passwords, reset credentials or install a provider.
 
 Experimental gamepad navigation supports standard-mapped controllers: D-pad or
 left stick to move, A to select, B to go back, X for a game's menu, LB/RB to
