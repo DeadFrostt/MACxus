@@ -109,6 +109,21 @@ test('backend source and ordered patch hashes are locked', async () => {
   }
 });
 
+test('wallet unlock is explicit, account-free and private-bus tested', async () => {
+  const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
+  assert.ok(lock.patches.some(p => p.file === 'xodus-keyring-unlock.patch'));
+  const patch = await fs.readFile('assets/xodus-keyring-unlock.patch', 'utf8');
+  for (const text of ['KeyringUnlock', 'keyring_unlock_private_bus_metadata_never_activates_or_reads_items',
+    'keyring_unlock_private_bus_ignores_completion_from_another_owner', 'keyring_unlock_private_bus_cancellation_and_timeout_dismiss_the_prompt',
+    'keyring_unlock_private_bus_prompt_connection_completion_and_lock_recheck', 'connection.remove_match(token)',
+    'keyring_unlock_prompt_never_tags_unrelated_or_unparented_windows',
+    'keyring_unlock_prompt_uses_only_the_verified_parent_app', 'keyring_unlock_prompt_reaper_id_requires_the_actual_launch_argument']) assert.ok(patch.includes(text),text);
+  assert.doesNotMatch(patch, /^\+.*(?:GetSecret|SearchItems|CreateCollection|SetSecret|ensure_device_credentials\(|https:\/\/)/m);
+  const build = await fs.readFile('scripts/build-backend.mjs', 'utf8');
+  assert.ok(build.includes("'keyring_unlock_', '--', '--test-threads=1'"));
+  assert.ok((await fs.readFile('.github/workflows/backend.yml','utf8')).includes('dbus-daemon'));
+});
+
 test('backend workflow shell parses and resolves the locked toolchain', async () => {
   const require = createRequire(import.meta.url);
   const yaml = require('js-yaml');
