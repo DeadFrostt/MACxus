@@ -58,6 +58,8 @@ import { gameSteamPortrait, nexusSteamArtwork } from './steam-artwork.js';
 import { addLiveSteamShortcut } from './steam-live.js';
 import { DownloadCompletionNotifications } from './download-notifications.js';
 import { KeyringSupport } from './keyring.js';
+import { WalletUnlocker } from './keyring-unlock.js';
+import { startSessionKeyring } from './keyring-session.js';
 import { showBeforeAccountCheck } from './launcher-startup.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -94,12 +96,23 @@ let authState: AppSnapshot['auth'] = {
   note: 'Checking the Xodus system keychain for a stored Microsoft account…',
 };
 let authJob: Promise<void> | undefined;
+let initialWalletAttempted = false;
 const catalog = new CatalogService();
 const gameActivities = new GameActivities();
 const gameAchievements = new GameAchievementsReader();
 const accountLibrary = new AccountLibrary((ids, market) => catalog.licensedProducts(ids, market));
 const demoMode = process.env.XODUS_DEMO === '1';
-const keyringSupport = new KeyringSupport();
+const walletUnlocker = new WalletUnlocker();
+const keyringSupport = new KeyringSupport(process.env, undefined, process.platform, undefined, {
+  startProvider: (provider, environment, owned) => startSessionKeyring(provider, environment, owned,
+    backend?.current.capabilities.commands.includes('keyring-session-stop') ? backend.current.binaryPath : undefined),
+  canUnlock: () => Boolean(backend?.current.capabilities.commands.includes('keyring-unlock')),
+  unlock: () => {
+    if (shutdownStarted || !mainWindow || mainWindow.isDestroyed()) return Promise.resolve('cancelled');
+    const handle = mainWindow && !mainWindow.isDestroyed() ? mainWindow.getNativeWindowHandle() : undefined;
+    return walletUnlocker.unlock(requireBackend('commands'), handle && handle.length >= 4 ? String(handle.readUInt32LE()) : '');
+  },
+});
 const demoArtwork = new Map<string, DemoArtwork>();
 let launcherUpdater: LauncherUpdater;
 const gameUpdates: Record<string, GameUpdate> = {};
@@ -247,6 +260,7 @@ function requireBackend(command: keyof typeof backend.current.capabilities): str
 }
 
 function ensureIdle(mode?: 'install' | 'launch' | 'remove'): void {
+  if (keyringSupport.busy) throw Error('Wait for the wallet operation to finish.');
   if (authState.running) throw Error('A sign-in operation is already in progress.');
   if (shutdownStarted) throw Error('The launcher is closing.');
   if (downloadCancellations.size) throw Error('A download is being cancelled. Wait for its cleanup to finish.');
@@ -331,16 +345,47 @@ async function refreshAccount(emit = true, afterAuth = false): Promise<AuthStatu
 
 async function refreshInitialAccount(): Promise<void> {
   const initialAuthState = authState;
-  const keyring = await keyringSupport.check();
+  const initialBackendKey = accountRefreshKey();
+  const stillCurrent = () => !shutdownStarted && authState === initialAuthState && !authState.running && initialBackendKey === accountRefreshKey();
+  let keyring = await keyringSupport.check();
   // Never overwrite a sign-in/refresh that the user started while metadata
   // was being checked, even if that newer operation has already completed.
-  if (shutdownStarted || authState !== initialAuthState || authState.running) return;
+  if (!stillCurrent()) return;
+  if (keyring.gameMode && keyring.state !== 'unavailable' && !initialWalletAttempted && mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()
+      && backend.current.available && backend.current.capabilities.commands.includes('keyring-unlock')) {
+    // The launcher is already visible, so the native password prompt has a
+    // parent. Attempt once: cancellation must not trigger repeated prompts.
+    initialWalletAttempted = true;
+    keyring = await keyringSupport.startForStartup();
+    if (!stillCurrent()) return;
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('keyring-state', keyring);
+    if (keyring.state !== 'ready') {
+      authState = { ...authState, stored: null, note: keyring.message };
+      emitSnapshot();
+      return;
+    }
+  }
   if (keyring.gameMode && ['locked', 'stopped', 'disabled', 'missing', 'needs-setup'].includes(keyring.state)) {
     authState = { ...authState, stored: null, note: keyring.message };
     emitSnapshot();
     return;
   }
   await refreshAccount();
+}
+
+async function prepareSystemWallet(): Promise<void> {
+  const status = await keyringSupport.check();
+  if (!status.gameMode || status.state === 'ready' || status.state === 'unavailable') return;
+  // Direct Steam game shortcuts have no launcher window yet. Give the wallet
+  // dialog a visible parent before any backend account read can block on it.
+  const directShortcut = shortcutOnly;
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    await showLauncher();
+    shortcutOnly = directShortcut;
+  }
+  const result = await keyringSupport.start();
+  if (result.state !== 'ready') throw Error(result.message);
+  if (directShortcut) mainWindow?.hide();
 }
 
 async function runAuth(command: 'login' | 'logout'): Promise<void> {
@@ -357,6 +402,7 @@ async function runAuth(command: 'login' | 'logout'): Promise<void> {
     if (command === 'login' && !backend.current.capabilities.externalAuth) {
       throw Error('Update the Nexus backend in Settings before signing in with this launcher.');
     }
+    if (command === 'login') await prepareSystemWallet();
     const view = fallbackAuthViewFactory(request => authViewFactory(mainWindow ?? undefined, undefined, request), () => browserAuthViewFactory());
     if (shutdownStarted) throw Error('The launcher is closing.');
     await accountProfile.select(undefined);
@@ -391,7 +437,7 @@ function requestAuth(command: 'login' | 'logout'): Promise<void> {
 async function startInstall(request: InstallRequest, updateGame?: Game): Promise<string> {
   ensureIdle(updateGame ? undefined : 'install');
   preparingInstall = true;
-  try { return await prepareInstall(request, updateGame); }
+  try { await prepareSystemWallet(); return await prepareInstall(request, updateGame); }
   finally { preparingInstall = false; }
 }
 
@@ -816,6 +862,7 @@ async function prepareGameLaunch(id: string): Promise<void> {
   let releaseDisplay = () => {};
   try {
     if (game.launchTools?.dualSenseCompatibility) writeLaunchLog('DualSense compatibility mode enabled for this game (054c:0ce6).');
+    await prepareSystemWallet();
     const legacyPrefixRoot = path.join(dataRoot, 'prefixes', game.id);
     const compatibilityDataPath = path.join(dataRoot, 'compatdata', game.id);
     const steamRoot = path.join(app.getPath('home'), '.steam', 'root');
@@ -1702,7 +1749,7 @@ app.whenReady().then(async () => {
     } catch { /* Keep an unavailable imported entry visible. */ }
   }
   runtime = new RuntimeManager(store.settings.runtimeRoot, emitLog, () => downloadCancellations.size > 0 || operations.size > 0 || installQueue.size > 0 || preparingInstall || backend?.current.updating === true);
-  backend = new BackendManager(app.getPath('userData'), store.settings.externalXodusRoot, emitLog, () => downloadCancellations.size > 0 || operations.size > 0 || installQueue.size > 0 || preparingInstall || runtime?.current.updating === true);
+  backend = new BackendManager(app.getPath('userData'), store.settings.externalXodusRoot, emitLog, () => keyringSupport.busy || downloadCancellations.size > 0 || operations.size > 0 || installQueue.size > 0 || preparingInstall || runtime?.current.updating === true);
   await backend.refresh();
   await runtime.refresh();
   void backend.checkUpdate().then(async () => {
@@ -1727,6 +1774,7 @@ app.whenReady().then(async () => {
   registerIpc();
   launchReady = true;
   if (startupRequest.gameId) {
+    await prepareSystemWallet();
     await refreshAccount(false);
     receiveLaunchRequest(startupRequest.gameId);
   } else await showBeforeAccountCheck(showLauncher, refreshInitialAccount, () => {
@@ -1750,15 +1798,17 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => gameDisplay.stop());
 
 app.on('before-quit', (event) => {
+  walletUnlocker.cancel();
   installQueue.stop();
   installQueue.stop();
   accountLibrary.reset();
   accountProfile?.cancel();
   accountRefresh.invalidate();
-  if (shutdownStarted || (!backendDiagnostics?.pendingWrites && !authJob && !preparingInstall && downloadCancellations.size === 0 && installQueue.size === 0 && operations.size === 0 && serviceSessions.size === 0 && !checkingGameUpdates && !launcherUpdater?.state.updating)) return;
+  if (shutdownStarted || (!walletUnlocker.busy && !backendDiagnostics?.pendingWrites && !authJob && !preparingInstall && downloadCancellations.size === 0 && installQueue.size === 0 && operations.size === 0 && serviceSessions.size === 0 && !checkingGameUpdates && !launcherUpdater?.state.updating)) return;
   event.preventDefault();
   shutdownStarted = true;
   void (async () => {
+    await walletUnlocker.stop();
     gameUpdateController?.abort();
     await gameUpdateJob?.catch(() => {});
     launcherUpdater?.cancel();

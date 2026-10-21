@@ -18,16 +18,20 @@ export function KeyringSetup({ disabled = false, compact = false }: { disabled?:
     } finally { if (id === generation.current) setBusy(false); }
   }
   useEffect(() => { void check(); return () => { generation.current++; }; }, []);
+  useEffect(() => window.launcher.onKeyringStatus?.(result => {
+    generation.current++;
+    setStatus(result); setFailed(false); setBusy(false);
+  }), []);
   const message = failed
     ? 'Keyring status could not be checked. Open your desktop wallet settings and ensure the wallet is enabled and unlocked.'
     : status?.message ?? 'Checking the system wallet without reading saved credentials…';
   const actions = <div className="button-row">
-    {status?.canStart ? <button className="secondary" aria-label="Start keyring service" title="Start an installed service without changing wallet security settings." disabled={busy || disabled} onClick={() => void check(true)}>{compact ? 'Start service' : 'Start keyring service'}</button> : null}
+    {status?.canStart || status?.canUnlock ? <button className="secondary" aria-label={status.canUnlock ? 'Unlock wallet' : 'Start keyring service'} title="Start or unlock the installed wallet using its own password window. Security settings are unchanged." disabled={busy || disabled} onClick={() => void check(true)}>{status.canUnlock ? 'Unlock wallet' : compact ? 'Start service' : 'Start keyring service'}</button> : null}
     <button className="secondary" aria-label="Check keyring" title="Check keyring" disabled={busy || disabled} onClick={() => void check()}><RefreshCw />{compact ? null : 'Check keyring'}</button>
   </div>;
   const icon = busy ? <LoaderCircle className="spin" /> : status?.state === 'ready' ? <Check /> : <CircleAlert />;
-  const safety = 'Nexus can start an installed service. It does not install a provider, enable a wallet you disabled, change its password or reset stored credentials.';
-  const gameModeHelp = 'Wallet setup and password prompts may not appear in Game Mode. Complete this step in Desktop Mode first, then return to Game Mode.';
+  const safety = 'Your wallet provider handles its password window. Nexus does not receive the password, enable a disabled wallet or reset stored credentials.';
+  const gameModeHelp = 'Use Start service or Unlock wallet for this session. If setup is unavailable here, complete it in Desktop Mode.';
   if (compact) {
     const problem = failed || Boolean(status && !['ready', 'stopped'].includes(status.state));
     const label = busy ? 'Checking…' : failed ? 'Unavailable' : status ? {
