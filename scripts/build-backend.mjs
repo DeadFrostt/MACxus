@@ -46,6 +46,7 @@ command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus-cli'
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'credential_']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'keyring_unlock_', '--', '--test-threads=1']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'keyring_session_', '--', '--test-threads=1']);
+command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'keyring_persistence_', '--', '--test-threads=1']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'content_license_']);
 command('cargo', ['test', '--locked', ...offline, ...features, '-p', 'xodus', 'ticket_diagnostic_']);
 command('cargo', ['test', '--locked', ...offline, '-p', 'xodus-service', 'store_']);

@@ -140,6 +140,20 @@ test('session keyring shutdown is limited to its verified Nexus-owned provider a
   assert.ok(build.includes("'keyring-session-stop'"));
 });
 
+test('optional KWallet persistence uses own watched session without locking or stopping other providers', async () => {
+  const lock=JSON.parse(await fs.readFile('assets/backend-source.lock.json','utf8'));
+  assert.ok(lock.patches.some(p=>p.file==='xodus-keyring-persistence.patch'));
+  const patch=await fs.readFile('assets/xodus-keyring-persistence.patch','utf8');
+  for(const name of ['genuine_ksecret','prompt_is_disabled','openAsync','message.set_no_reply(true)',
+    'keyring_persistence_private_bus_foreign_and_absent_provider_are_untouched',
+    'keyring_persistence_private_bus_no_creation_unlock_or_extra_authorization',
+    'keyring_persistence_private_bus_replacement_or_lock_race_releases_only_own_handle',
+    'keyring_persistence_private_bus_timeout_denial_and_foreign_signal_never_sync']) assert.ok(patch.includes(name),name);
+  assert.doesNotMatch(patch,/^\+.*(?:"GetSecret"|"SearchItems"|"Unlock"|"Lock"|"quit"|"CreateCollection"|"pamOpen"|closeAllWallets|FDO_APPID)/m);
+  const build=await fs.readFile('scripts/build-backend.mjs','utf8');
+  assert.ok(build.includes("'keyring_persistence_', '--', '--test-threads=1'"));
+});
+
 test('backend workflow shell parses and resolves the locked toolchain', async () => {
   const require = createRequire(import.meta.url);
   const yaml = require('js-yaml');
