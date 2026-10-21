@@ -124,6 +124,22 @@ test('wallet unlock is explicit, account-free and private-bus tested', async () 
   assert.ok((await fs.readFile('.github/workflows/backend.yml','utf8')).includes('dbus-daemon'));
 });
 
+test('session keyring shutdown is limited to its verified Nexus-owned provider and has no credential API', async () => {
+  const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
+  assert.ok(lock.patches.some(p => p.file === 'xodus-keyring-session-stop.patch'));
+  const patch = await fs.readFile('assets/xodus-keyring-session-stop.patch', 'utf8');
+  for (const text of ['KeyringSessionStop', 'GetConnectionUnixProcessID', 'GetConnectionUnixUser',
+    'xodus-nexus-keyring-', '/MainApplication', 'org.qtproject.Qt.QCoreApplication',
+    'keyring_session_stop_private_bus_never_quits_a_replacement_owner',
+    'keyring_session_stop_private_bus_rejects_foreign_pid_uid_and_cgroup',
+    'keyring_session_stop_private_bus_bounds_unresponsive_and_nonexiting_providers',
+    'keyring_session_stop_rejects_unmanaged_process_before_connecting_to_user_bus']) assert.ok(patch.includes(text), text);
+  assert.doesNotMatch(patch, /^\+.*(?:GetSecret|SearchItems|CreateCollection|SetSecret|closeAllWallets|ensure_device_credentials\(|https:\/\/)/m);
+  const build = await fs.readFile('scripts/build-backend.mjs', 'utf8');
+  assert.ok(build.includes("'keyring_session_', '--', '--test-threads=1'"));
+  assert.ok(build.includes("'keyring-session-stop'"));
+});
+
 test('backend workflow shell parses and resolves the locked toolchain', async () => {
   const require = createRequire(import.meta.url);
   const yaml = require('js-yaml');
