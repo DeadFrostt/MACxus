@@ -3,6 +3,26 @@
   "approvals": [
     {
       "kind": "launcher",
+      "runId": "39651641231",
+      "commit": "56780276d25c5ec8d00e709abb98b0d99e7c81bd",
+      "manifestSha256": "ba65053cf321838b50f7e4af3dc842949f83e8bcc482542dca06f3a54dee6c37",
+      "notesSha256": "756540d67a0bb8252a5ca96eac32d56821a54fa2e81bf8136c5048ac0ee69c54",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit human stable-promotion and English-notes approval on 2026-10-21, reiterated after authorizing the final isolated Balatro test with normal Xbox cloud synchronization. Main launcher CI39651641231 and backend CI39651641355 succeeded. Exact candidate manifests, binary and corresponding-source archives passed source/run identity, SHA256/SHA512, recipe, packaged-code and ordered38patch checks. The unchanged final launcher0.3.10 and backend0.2.10 ran with the existing released shared runtime. The human confirmed game startup and normal quit; game and launcher exited0, account service and bridge were ready, cloud synchronization was enabled, and no fatal or cleanup error occurred. Original game, prefix, stored keyring records, production pointers and candidate/component hashes stayed unchanged. No private processes or service sessions remained after fixture cleanup. Full gameplay, exact window size, physical handheld coverage and an independent cloud roundtrip are not claimed. Promote only these exact tested bytes; reviewed notes are separately digest-bound."
+    },
+    {
+      "kind": "backend",
+      "runId": "39651641355",
+      "commit": "56780276d25c5ec8d00e709abb98b0d99e7c81bd",
+      "manifestSha256": "f0bd3046f4b5d4e9ea56cdf3416d28874d801c6b03fc39202fec6b2eafc5c2dd",
+      "notesSha256": "98dd3a6d92b5f0a97c32dd4b732b8d5a78c0021c0761657b7a11959b9679b869",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Explicit human stable-promotion and English-notes approval on 2026-10-21, reiterated after the final isolated Balatro test with normal Xbox cloud synchronization. Main backend CI39651641355 succeeded with the pinned Rust1.99.0/glibc2.35 build and native tests. Exact binary/source archives, SHA256/SHA512, source/run identity, recipe and all38corresponding source patches were verified. The unchanged backend0.2.10 and final CI launcher0.3.10 ran with the existing released shared runtime. The human confirmed startup and normal quit; game and launcher exited0, account service and bridge were ready and cloud synchronization was enabled. Original game/prefix/keyring records and production pointers stayed unchanged, with no fatal/cleanup error or remaining private processes/service sessions. Full gameplay, exact window size, physical handheld coverage and independent cloud restoration are not inferred. Publish these exact tested bytes with the separately digest-bound approved notes, without rebuilding or switching production components."
+    },
+    {
+      "kind": "launcher",
       "runId": "39473729924",
       "commit": "8411926de55a24b6c9b910b79e61300fd63a8121",
       "manifestSha256": "87b758ee5621aaefddadb8f026d6f1fa2ab0e080e887ff22c2c1261fd180b778",
