@@ -63,28 +63,13 @@ Flatpak version available through Discover. Other browsers are not supported.
 - **Settings → Downloads** sets a combined game download speed limit in MiB/s (0 means unlimited). A supporting Nexus backend is required; saving the limit also applies it to active downloads.
 - For account, library or installation errors, use **Settings → Xodus backend → Open backend diagnostic log**. The local log contains safe error codes and operation results, not credentials. Review it before sharing.
 
-The system keyring (KDE Wallet or GNOME Keyring) stores your Microsoft sign-in
-credentials so you do not need to sign in each time. It must be enabled and
-unlocked, with Secret Service support. The first-run wizard and account Settings can check
-the service, start it and open the native unlock dialog (`busctl` is needed for these checks).
-If no wallet collection exists, **Create wallet** opens the system setup dialog;
-choose its password there. An empty password does not protect stored credentials.
-On KDE, enable the wallet in **System Settings → KDE Wallet** if it was disabled.
-In Game Mode, Nexus can start a supported KDE wallet and show its native password
-dialog. If setup or unlocking is unavailable, complete it in Desktop Mode.
-Nexus does not change existing passwords, reset credentials or install a provider.
+## Wallet setup and unlocking
 
-Experimental gamepad navigation supports standard-mapped controllers: D-pad or
-left stick to move, A to select, B to go back, X for a game's menu, LB/RB to
-switch pages and the right stick to scroll. Mouse, touch and keyboard controls
-remain available. Moving through library games selects them; A opens a game page
-and B returns to its card. B closes an open menu or screenshot gallery first;
-LB/RB changes screenshots inside the gallery. Home, My Library and Store
-switch on controller focus. Recent games, Settings, Install Queue and action
-buttons still require A. Up from the first library row reaches filters and search;
-Down returns to the games. Directional navigation scrolls the selected card into view.
-Use Steam + X for the on-screen keyboard in Game Mode;
-system file pickers and sign-in windows may still need mouse or touch input.
+- If the service is stopped, use **Start service**. Supported KDE wallets should also start automatically when Nexus opens in Game Mode.
+- If your wallet has a password, its native unlock window may appear. Enter your **wallet password**, which is not necessarily your Microsoft account password. Nexus does not receive this password.
+- A wallet without a password should unlock without requiring password entry.
+- If no wallet exists, use **Create wallet** and complete the system dialog. On KDE, choose **Classic, blowfish encrypted file** for a normal password-based wallet if you do not have a GPG encryption key. An empty password does not protect stored credentials.
+- If setup or the password dialog does not work in Game Mode, try it in Desktop Mode first. If the problem persists, include the backend diagnostic log in your issue report.
 
 [Documentation](https://github.com/domsvoboda/xodus-nexus/wiki) ·
 [Report an issue](https://github.com/domsvoboda/xodus-nexus/issues)
