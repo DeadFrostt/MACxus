@@ -205,6 +205,8 @@ export interface GameUpdate {
 export interface DiagnosticLog { name: string; content: string; truncated: boolean }
 
 export interface KeyringStatus {
+  canCreate?: boolean;
+  canUnlock?: boolean;
   state: 'ready' | 'locked' | 'stopped' | 'disabled' | 'missing' | 'needs-setup' | 'unavailable';
   gameMode: boolean;
   canStart: boolean;
@@ -357,6 +359,8 @@ export interface LauncherApi {
   refreshAccount(): Promise<AuthStatus>;
   checkKeyring(): Promise<KeyringStatus>;
   startKeyring(): Promise<KeyringStatus>;
+  createKeyringCollection(): Promise<KeyringStatus>;
+  onKeyringStatus(callback: (status: KeyringStatus) => void): () => void;
   checkLauncherUpdate(): Promise<LauncherUpdate | undefined>;
   installLauncherUpdate(): Promise<void>;
   restartLauncher(): Promise<void>;

@@ -5,6 +5,19 @@
 - Fix Jurassic World Evolution 3 aborting during app-constrained notification registration at startup.
 - Fix repeated Xbox task-queue termination requests leaving games waiting during world cleanup or shutdown.
 
+## 0.3.10
+
+- Start supported KDE wallets automatically in Game Mode and show native unlock dialogs for password-protected wallets.
+- Correct keyring-provider detection and show actionable account-service errors.
+- Offer native first-wallet creation when no collection exists.
+- Improve saved-account persistence across Desktop Mode, Game Mode and shutdown.
+
+## Backend 0.2.10
+
+- Add native wallet setup and unlock helpers and improve KWallet credential persistence.
+- Preserve complete encrypted executable files during resumed installations and repair files trimmed by an earlier resume.
+- Report actionable launch-image errors instead of panicking.
+
 ## Backend 0.2.7
 
 - Keep independently verified account-library records available when other license records are invalid or conflicting.
