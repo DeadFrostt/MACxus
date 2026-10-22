@@ -55,7 +55,8 @@ static void WINAPI progress( void *context, XPackageInstallationMonitorHandle mo
     CHECK("callback-monitor", state && monitor == state->monitor);
     IXPackageImpl4_XPackageGetInstallationProgress(package, monitor, &value);
     state->complete = value.completed;
-    CHECK("honest-byte-counts", !value.totalBytes && !value.installedBytes && !value.launchBytes);
+    CHECK("honest-byte-counts", value.completed ? value.totalBytes > 0 && value.installedBytes == value.totalBytes && value.launchBytes == value.totalBytes :
+        value.totalBytes == ~(UINT64)0 && !value.installedBytes && !value.launchBytes);
     CHECK("launchable-consistent", value.completed == value.launchable);
     InterlockedIncrement(&state->calls);
     if (state->started)
@@ -92,7 +93,9 @@ static void get( struct state *state, BOOL ready )
     memset(&value, 0xcc, sizeof(value));
     IXPackageImpl4_XPackageGetInstallationProgress(package, state->monitor, &value);
     CHECK("snapshot-ready", value.completed == ready && value.launchable == ready);
-    CHECK("snapshot-no-fabricated-bytes", !value.totalBytes && !value.installedBytes && !value.launchBytes);
+    CHECK("snapshot-no-fabricated-bytes", !state->monitor ? !value.totalBytes && !value.installedBytes && !value.launchBytes : ready ?
+        value.totalBytes > 0 && value.installedBytes == value.totalBytes && value.launchBytes == value.totalBytes :
+        value.totalBytes == ~(UINT64)0 && !value.installedBytes && !value.launchBytes);
 }
 static BOOL dispatch( XTaskQueueHandle queue, XTaskQueuePort port, UINT timeout )
 {

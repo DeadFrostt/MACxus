@@ -84,8 +84,12 @@ The runtime does not provide a unique platform device identifier.
   completion-port notification and subsequent availability changes, zero-interval
   query-only snapshots, selector copies, all queue dispatch modes, cancellation,
   queued/running unregister, waiting, and close from inside a callback.
-  Byte totals remain zero when unknown. Synthetic missing files must not report
+  Byte totals use the SDK unknown-size sentinel for missing payload. Missing files must not report
   completion; the tests do not establish game startup or package ownership.
+- `package-progress-bytes-probe.c`: real 64-bit installed file totals from a
+  selected synthetic layout, overlapping FileGroups/selectors, empty and sparse
+  files, unknown size, invalidated metadata and byte-only progress notifications.
+  Counts declared destinations only, without reading file contents or licensing.
 - `playfab-session-probe.c`: pinned threading ABI checks, asynchronous test-only
   dialog choices, preserved title callbacks, retained synthetic users, caller
   Manual completion queue, genuine upload failure and acknowledged upload before
