@@ -12,7 +12,7 @@ import { subscriptionBadge } from '../shared/subscription';
 import { defaultLaunchTools, normalizeLaunchTools } from '../shared/launch-tools';
 import type { GameLaunchTools } from '../shared/types';
 import { PackageInstallProvider, usePackageInstall } from './PackageInstall';
-import { defaultLibraryFilters, loadLibraryFilters, saveLibraryFilters, type LibraryFilters } from './library-preferences';
+import { defaultLibraryFilters, loadLibraryFilters, saveLibraryFilters, libraryProductMatchesPlayState, type LibraryFilters } from './library-preferences';
 import { InstallQueueShortcut } from './InstallQueueShortcut';
 import { GamepadNavigation } from './GamepadNavigation';
 import { ConfirmationProvider, useConfirmation } from './Confirmation';
@@ -220,6 +220,11 @@ export function HomePage({ data, go, action }: {
   </main>;
 }
 
+function CatalogSupportBadge({ product }: { product: CatalogProduct }) {
+  return <span className={`catalog-support ${product.installability}`} title={product.supportNote}
+    aria-label={product.installability === 'unknown' ? 'Package support unknown' : undefined}>{product.installability === 'supported' ? 'PC' : product.installability === 'unknown' ? '?' : 'Unsupported'}</span>;
+}
+
 export function StoreProductCard({ product, selected, disabled, label, select, install }: {
   product: CatalogProduct; selected: boolean; disabled: boolean; label: string;
   select: (product: CatalogProduct) => void; install: (product: CatalogProduct) => void;
@@ -228,7 +233,7 @@ export function StoreProductCard({ product, selected, disabled, label, select, i
     <button className="catalog-card-main" data-gamepad-auto-select="focus" data-gamepad-card-activate
       onFocus={() => select(product)} onClick={() => select(product)}>
       {product.posterUrl ? <img src={product.posterUrl} alt={`${product.title} cover`} /> : <div className="catalog-cover-placeholder"><Gamepad2 /></div>}
-      <span className={`catalog-support ${product.installability}`}>{product.installability === 'supported' ? 'PC' : product.installability === 'unknown' ? '?' : 'Unsupported'}</span>
+      <CatalogSupportBadge product={product} />
       <div><GameTitle title={product.title} /><small>{product.publisher ?? product.productId}</small><span>{product.purchasePrice ?? 'Price unavailable'}{product.includedWith ? ` · ${product.includedWith}` : ''}</span></div>
     </button>
     <button className="catalog-card-install" data-gamepad-skip data-gamepad-card-action disabled={disabled} onClick={() => install(product)}>
@@ -383,15 +388,15 @@ export function LibraryPagination({ loading, hasMore, load, searching = false }:
 export function LibraryProductCard({ product, present, downloading, installing, canInstall, install }: {
   product: AccountLibraryPage['products'][number]; present: boolean; downloading: boolean; installing?: string; canInstall: boolean; install: (product: CatalogProduct) => void;
 }) {
-  const disabled = present || downloading || Boolean(installing) || !canInstall;
+  const disabled = present || downloading || Boolean(installing) || !canInstall || product.installability !== 'supported';
   const label = present ? 'Installed' : downloading ? 'In Install Queue' : installing === product.productId ? 'Preparing…' : 'Install';
   const card = useRef<HTMLElement>(null);
   useBrowserLayoutEffect(() => {
     if (!disabled && document.activeElement === card.current) card.current?.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
   }, [disabled]);
   return <article ref={card} className="catalog-card" data-gamepad-card tabIndex={disabled ? 0 : -1} aria-label={disabled ? `${product.title}, ${label}. Action unavailable` : undefined}>
-    <div className="catalog-card-main">{product.posterUrl ? <img src={product.posterUrl} alt={`${product.title} cover`} loading="lazy" /> : <div className="catalog-cover-placeholder"><Gamepad2 /></div>}<span className="catalog-support supported">PC</span><div><GameTitle title={product.title} /><small>{product.publisher ?? product.productId}</small><span>{product.access === 'owned' ? 'Owned' : 'Game Pass'}</span></div></div>
-    <button className="catalog-card-install" disabled={disabled} onClick={() => install(product)}>{present ? <Check /> : <Download />}{label}</button>
+    <div className="catalog-card-main">{product.posterUrl ? <img src={product.posterUrl} alt={`${product.title} cover`} loading="lazy" /> : <div className="catalog-cover-placeholder"><Gamepad2 /></div>}<CatalogSupportBadge product={product} /><div><GameTitle title={product.title} /><small>{product.publisher ?? product.productId}</small><span>{product.access === 'owned' ? 'Owned' : 'Game Pass'}</span></div></div>
+    <button className="catalog-card-install" disabled={disabled} onClick={() => { if (!disabled) install(product); }}>{present ? <Check /> : <Download />}{label}</button>
   </article>;
 }
 
@@ -445,7 +450,7 @@ export function AccountGames({ data, toast, selectedId, select, menu, filters, o
   const rows = [
     ...data.games.filter(game => playState !== 'installable' && (kind === 'all' || access(game) === kind)).sort((a, b) => a.title.localeCompare(b.title))
       .map(game => ({ id: game.id, title: game.title, game, product: undefined })),
-    ...products.filter(() => playState !== 'installed').map(product => ({ id: product.productId, title: product.title, product, game: undefined })),
+    ...products.filter(product => libraryProductMatchesPlayState(product, playState)).map(product => ({ id: product.productId, title: product.title, product, game: undefined })),
   ].filter(row => row.title.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
   async function load(refresh = false) {
     setBusy(true); setError(undefined);
@@ -460,6 +465,7 @@ export function AccountGames({ data, toast, selectedId, select, menu, filters, o
     finally { if (currentIdentity.current === identity) setBusy(false); }
   }
   async function install(product: CatalogProduct) {
+    if (product.installability !== 'supported') { toast({ kind: 'error', message: product.supportNote }); return; }
     setInstalling(product.productId);
     try {
       const folder = product.title.normalize('NFKD').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 80) || product.productId;
@@ -497,7 +503,7 @@ export function AccountGames({ data, toast, selectedId, select, menu, filters, o
       })}</div>
       {!busy && !searching && !error && !rows.length ? <p>{visible?.cursor && playState !== 'installed' ? 'No games match these filters in the loaded results. Load more to continue.' : 'No games match these filters.'}</p> : null}
       <div data-gamepad-library-footer><LibraryPagination loading={busy} hasMore={Boolean(visible?.cursor)} searching={searching} load={() => { void load(); }} />
-      <p className="account-library-note">Only licensed games with a verified, supported PC package are listed. Add-ons and unsupported packages are excluded. Installation checks your license again.</p></div>
+      <p className="account-library-note">Licensed games are listed regardless of package support. Unsupported games cannot be installed. Add-ons are excluded. Installation checks your license again.</p></div>
     </div>
   </section>;
 }

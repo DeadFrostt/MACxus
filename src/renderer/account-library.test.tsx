@@ -1,8 +1,23 @@
 import { expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { AccountGames, Cover, GameLaunchToolFields, GameTitle, HomePage, LibraryPagination, Sidebar, type LibraryFilters } from './App';
+import { AccountGames, Cover, GameLaunchToolFields, GameTitle, HomePage, LibraryPagination, LibraryProductCard, StoreProductCard, Sidebar, type LibraryFilters } from './App';
 import { defaultLaunchTools } from '../shared/launch-tools';
 import { demoSnapshot } from '../shared/demo-data';
+import type { AccountLibraryPage } from '../shared/types';
+
+it.each(['supported', 'unsupported', 'unknown'] as const)('uses the Store %s badge in Owned without enabling unsupported installs', installability => {
+  const product: AccountLibraryPage['products'][number] = { productId: '9AAAAAAAAAAA', title: 'Owned & game', access: 'owned',
+    description: '', categories: [], installability, supportNote: 'Package <reason>' };
+  const html = renderToStaticMarkup(<LibraryProductCard product={product} present={false} downloading={false} canInstall install={() => {}} />);
+  const store = renderToStaticMarkup(<StoreProductCard product={product} selected={false} disabled={installability !== 'supported'} label="Install" select={() => {}} install={() => {}} />);
+  const badge = (text: string) => text.match(/<span class="catalog-support[^>]*>[\s\S]*?<\/span>/)?.[0];
+  expect(badge(html)).toBe(badge(store));
+  expect(html).toContain('<span>Owned</span>');
+  expect(html.includes('disabled=""')).toBe(installability !== 'supported');
+  expect(html).toContain('title="Package &lt;reason&gt;"');
+  if (installability === 'unsupported') expect(html).toContain('>Unsupported</span>');
+  if (installability !== 'supported') { expect(html).toContain('tabindex="0"'); expect(html).toContain('Action unavailable'); }
+});
 
 it('keeps one My Library and Store navigation, no separate Game Pass page',()=>{
   const html=renderToStaticMarkup(<Sidebar data={demoSnapshot()} page="library" go={()=>{}} />);

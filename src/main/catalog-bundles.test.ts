@@ -55,3 +55,12 @@ it('stops cyclic and over-deep bundles without fetching arbitrary licensing back
   expect((await cycle.service.licensedProducts([id(20)], 'US'))[0]?.installability).not.toBe('supported');
   expect(cycle.requests.flat()).toHaveLength(2);
 });
+
+it('does not exceed one edition’s depth using metadata cached for other licensed roots', async () => {
+  const roots = Array.from({ length: 9 }, (_, i) => id(i));
+  const { service, requests } = fixture(roots.map((root, i) => game(root, i + 1 < roots.length ? [roots[i + 1]] : [])));
+  const result = await service.licensedProducts(roots, 'US');
+  expect(result.find(p => p.productId === roots[0])?.installability).toBe('unknown');
+  expect(result.find(p => p.productId === roots[2])?.installability).toBe('supported');
+  expect(requests.flat()).toHaveLength(9);
+});

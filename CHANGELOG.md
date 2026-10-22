@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Show owned games with unsupported packages in My Library with the existing Unsupported badge and installation disabled.
 - Fix missing library editions when several Store bundles are loaded together.
 - Implement communication audio endpoint queries and change notifications requested by games such as Deep Rock Galactic.
 - Fix missing new-save notifications at session close and incorrectly successful cloud-upload results.

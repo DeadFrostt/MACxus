@@ -192,7 +192,10 @@ function bundleReferences(product: Record<string, unknown> | undefined): BundleR
   return [...references].map(([productId, primary]) => ({ productId, primary }));
 }
 
-function packageSupport(productId: string, details: Map<string, Record<string, unknown>>, visited = new Set<string>()): PackageSupport {
+function packageSupport(productId: string, details: Map<string, Record<string, unknown>>, visited = new Set<string>(), budget = { remaining: 512 }): PackageSupport {
+  if (visited.size > 6 || budget.remaining-- <= 0) return {
+    installability: 'unknown', supportNote: 'The Store bundle metadata could not be fully resolved.',
+  };
   const product = details.get(productId);
   const direct = directPackageSupport(product);
   if (direct) return direct;
@@ -208,7 +211,7 @@ function packageSupport(productId: string, details: Map<string, Record<string, u
   const nextVisited = new Set(visited).add(productId);
   const references = bundleReferences(product);
   if (references.length > 1) {
-    const resolved = references.map(reference => packageSupport(reference.productId, details, nextVisited));
+    const resolved = references.map(reference => packageSupport(reference.productId, details, nextVisited, budget));
     if (resolved.some(item => item.installability === 'supported')) return {
       installability: 'supported', packageFormat: 'MSIXVC',
       supportNote: 'This Store offer contains multiple products. Choose a verified PC package before installing. Ownership is checked by Xodus.',
@@ -225,7 +228,7 @@ function packageSupport(productId: string, details: Map<string, Record<string, u
       : 'No Windows.Desktop MSIXVC package or resolvable primary bundle product was found. It may be an add-on or console-only product.',
   };
 
-  const resolved = packageSupport(candidates[0].productId, details, nextVisited);
+  const resolved = packageSupport(candidates[0].productId, details, nextVisited, budget);
   if (resolved.installability !== 'supported') return {
     ...resolved,
     supportNote: `The Store offer points to ${candidates[0].productId}, but ${resolved.supportNote.charAt(0).toLowerCase()}${resolved.supportNote.slice(1)}`,
@@ -317,12 +320,12 @@ export class CatalogService {
         const uri = string(purposes.flatMap(purpose => images.filter(image => image.ImagePurpose === purpose))[0]?.Uri);
         return uri?.startsWith('//') ? `https:${uri}` : uri;
       };
-      return [{ productId: id, title: localized?.ProductTitle, description: localized?.ProductDescription,
+      return [{ productId: id, title: string(localized?.ProductTitle) ?? id, description: localized?.ProductDescription,
         publisherName: localized?.PublisherName, boxArtUrl: find(POSTER_PURPOSES), isGame: true }];
     });
-    // Entitlement does not imply a PC package or supported format. Only a real
-    // unambiguous Windows.Desktop MSIXVC target can be "Ready to install".
-    return parseCatalogProducts({ productsList: rows }, catalog).filter(product => product.installability === 'supported');
+    // Ownership and installation support are independent. Preserve the game's
+    // real package status for the library badge and Ready to install filter.
+    return parseCatalogProducts({ productsList: rows }, catalog);
   }
 
   private async fetchDetails(batch: string[], market: string): Promise<Record<string, unknown>[]> {
@@ -351,12 +354,15 @@ export class CatalogService {
       const pending = [...new Set(frontiers.flat())].filter(id => !fetched.has(id));
       const batches: string[][] = [];
       for (let offset = 0; offset < pending.length; offset += 25) batches.push(pending.slice(offset, offset + 25));
-      let nextBatch = 0;
+      let nextBatch = 0, stopped = false;
       try {
         await Promise.all(Array.from({ length: Math.min(4, batches.length) }, async () => {
-          while (nextBatch < batches.length) {
+          while (!stopped && nextBatch < batches.length) {
             const batch = batches[nextBatch++];
-            for (const product of await this.fetchDetails(batch, market)) details.set(string(product.ProductId)!.toUpperCase(), product);
+            let products: Record<string, unknown>[];
+            try { products = await this.fetchDetails(batch, market); }
+            catch (error) { stopped = true; throw error; }
+            for (const product of products) details.set(string(product.ProductId)!.toUpperCase(), product);
             for (const id of batch) fetched.add(id);
           }
         }));
