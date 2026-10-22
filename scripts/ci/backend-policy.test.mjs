@@ -8,6 +8,34 @@ import path from 'node:path';
 import os from 'node:os';
 import { backendSourceArchiveArgs } from '../backend-source-archive.mjs';
 
+test('bundle resolution follows declared contents and preserves contributor regressions (#273, #298)', async () => {
+  const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
+  const entry = lock.patches.find(p => p.file === 'xodus-bundle-membership.patch');
+  assert.ok(entry);
+  const patch = await fs.readFile(`assets/${entry.file}`, 'utf8');
+  assert.equal(createHash('sha256').update(patch).digest('hex'), entry.sha256);
+  assert.ok(lock.patches.findIndex(p => p.file === entry.file) >
+    lock.patches.findIndex(p => p.file === 'xodus-package-selection.patch'));
+  const files = [...patch.matchAll(/^diff --git a\/(\S+) b\/\S+$/gm)].map(match => match[1]);
+  assert.deepEqual(files.sort(), [
+    'crates/xodus-cli/src/package_plan.rs', 'crates/xodus-cli/src/package_plan_http_tests.rs',
+  ].sort());
+  for (const expected of ['premium_entitlement_links_do_not_walk_back_to_parent_or_foreign_games',
+    'premium_license_only_addon_never_selects_a_game_that_grants_it',
+    'premium_game_entitlement_is_not_bundle_membership_either',
+    'premium_http_only_reads_declared_bundle_members',
+    'premium_http_reports_exact_status_without_exposing_response_body',
+    'premium_unavailable_declared_member_still_stops_resolution',
+    'premium_nested_bundles_keep_real_addon_choices_and_explicit_selection',
+    'premium_bundle_depth_and_product_limits_still_fail_closed']) assert.ok(patch.includes(expected), expected);
+  assert.ok((await fs.readFile('assets/xodus-package-selection.patch', 'utf8'))
+    .includes('durable_entitlement_back_references_do_not_form_bundle_cycles'));
+  assert.doesNotMatch(patch, /diff --git a\/.*(?:tokens\/|licensing\/|license\.rs|login\.rs|session\.rs|streaming\.rs)/);
+  const added = patch.split('\n').filter(line => line.startsWith('+') && !line.startsWith('+++')).join('\n');
+  assert.doesNotMatch(added, /licensed\.into_iter|error_for_status|\.text\(\)|\.bytes\(\)|println!/);
+  assert.ok(patch.includes("skeltavik"));
+});
+
 test('auth response consistency and coherent credential persistence are pinned and account-free tested', async () => {
   const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
   assert.ok(lock.patches.some(p => p.file === 'xodus-auth-consistency.patch'));
