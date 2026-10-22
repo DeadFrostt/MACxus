@@ -36,6 +36,33 @@ test('bundle resolution follows declared contents and preserves contributor regr
   assert.ok(patch.includes("skeltavik"));
 });
 
+test('JWE support changes only licensing ticket formatting, not Xbox or Store authentication (#294)', async () => {
+  const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
+  const entry = lock.patches.find(p => p.file === 'xodus-licensing-jwe.patch');
+  assert.ok(entry);
+  const patch = await fs.readFile(`assets/${entry.file}`, 'utf8');
+  assert.equal(createHash('sha256').update(patch).digest('hex'), entry.sha256);
+  assert.ok(lock.patches.findIndex(p => p.file === entry.file) >
+    lock.patches.findIndex(p => p.file === 'xodus-store-ticket.patch'));
+  for (const expected of ['pub fn licensing_ticket', 'fn is_compact_jwe',
+    'content_ticket_jwe_is_bare_only_at_the_licensing_boundary',
+    'content_ticket_opaque_compact_and_delegation_forms_stay_byte_exact',
+    'content_ticket_dotted_or_malformed_values_are_not_reinterpreted_as_jwe',
+    'content_ticket_content_request_preserves_jwe_and_other_license_fields',
+    'store_license_jwe_keeps_existing_request_and_opaque_ticket_behavior']) assert.ok(patch.includes(expected), expected);
+  const files = [...patch.matchAll(/^diff --git a\/(\S+) b\/\S+$/gm)].map(match => match[1]);
+  assert.deepEqual(files.sort(), [
+    'crates/xodus-cli/src/license.rs', 'crates/xodus-service/src/store_license.rs',
+    'crates/xodus/src/licensing/content_response_tests.rs',
+    'crates/xodus/src/models/licensing_ticket_tests.rs', 'crates/xodus/src/models/secrets.rs',
+  ].sort());
+  const removed = patch.split('\n').filter(line => line.startsWith('-') && !line.startsWith('---'));
+  assert.deepEqual(removed, Array(2).fill('-    let user_token = xodus::models::secrets::store_ticket(user_token);'));
+  assert.equal((patch.match(/^\+    let user_token = xodus::models::secrets::licensing_ticket\(user_token\);$/gm) ?? []).length, 2);
+  const build = await fs.readFile('scripts/build-backend.mjs', 'utf8');
+  assert.ok(build.includes("'-p', 'xodus', 'content_ticket_'"));
+});
+
 test('auth response consistency and coherent credential persistence are pinned and account-free tested', async () => {
   const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
   assert.ok(lock.patches.some(p => p.file === 'xodus-auth-consistency.patch'));
