@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { run } from './process.js';
 import { installedEacRuntime } from './anti-cheat.js';
+import { prepareManagedPrefix } from './managed-prefix.js';
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
@@ -280,7 +281,7 @@ export async function prepareProtonRunner(
     return undefined;
   }
 
-  await fs.mkdir(compatibilityDataPath, { recursive: true });
+  await prepareManagedPrefix(compatibilityDataPath);
   await fs.mkdir(steamRoot, { recursive: true });
   await rebaseRuntimeSymlinks(path.join(compatibilityDataPath, 'pfx'), protonRoot);
   let missing = await missingPrefixFiles(compatibilityDataPath);
@@ -303,6 +304,7 @@ export async function prepareProtonRunner(
       throw new Error(`The Proton prefix was not prepared correctly; missing ${missing.join(', ')}${detail ? `: ${detail}` : ` (code ${initialized.code})`}`);
     }
   }
+  await prepareManagedPrefix(compatibilityDataPath);
   await rebaseRuntimeSymlinks(path.join(compatibilityDataPath, 'pfx'), protonRoot);
 
   const files = path.join(protonRoot, 'files');
