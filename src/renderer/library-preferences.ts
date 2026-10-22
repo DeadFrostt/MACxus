@@ -1,4 +1,4 @@
-import type { AccountLibraryPage } from '../shared/types';
+import type { AccountLibraryPage, CatalogProduct } from '../shared/types';
 
 export interface LibraryFilters {
   kind: AccountLibraryPage['kind'];
@@ -6,6 +6,10 @@ export interface LibraryFilters {
   query: string;
 }
 export const defaultLibraryFilters: LibraryFilters = { kind: 'all', playState: 'all', query: '' };
+
+export function libraryProductMatchesPlayState(product: Pick<CatalogProduct, 'installability'>, playState: LibraryFilters['playState']): boolean {
+  return playState !== 'installed' && (playState !== 'installable' || product.installability === 'supported');
+}
 const key = 'xodus-nexus.library-filters.v1';
 type Preferences = Pick<Storage, 'getItem' | 'setItem'>;
 

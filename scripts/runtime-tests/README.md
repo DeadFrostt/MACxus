@@ -84,8 +84,25 @@ The runtime does not provide a unique platform device identifier.
   completion-port notification and subsequent availability changes, zero-interval
   query-only snapshots, selector copies, all queue dispatch modes, cancellation,
   queued/running unregister, waiting, and close from inside a callback.
-  Byte totals remain zero when unknown. Synthetic missing files must not report
+  Byte totals use the SDK unknown-size sentinel for missing payload. Missing files must not report
   completion; the tests do not establish game startup or package ownership.
+- `package-progress-bytes-probe.c`: real 64-bit installed file totals from a
+  selected synthetic layout, overlapping FileGroups/selectors, empty and sparse
+  files, unknown size, invalidated metadata and byte-only progress notifications.
+  Counts declared destinations only, without reading file contents or licensing.
+- `gamesave-sync-probe.c`: actual save implementation with a closed synthetic
+  transport. Checks both provider formats, incomplete transfers, malformed
+  metadata, unuploaded-local conflicts, replacement rollback and recovery copies.
+  Network and account helpers are test-only stubs. No real saves are accessed.
+- `gamesave-transfer-probe.c`: actual upload, close and synchronization helpers
+  with two isolated device roots and a closed memory transport. Checks delayed
+  completion, overlapping revisions, failed transfers, durable retries and
+  session-release notifications without contacting cloud services.
+- `user-audio-probe.c`: communication audio endpoint getters and notification
+  lifetime using the actual helper, a closed MMDevice source and real task queues.
+  Covers Unicode, missing devices, failed initialization, queue cancellation,
+  concurrent registration and reentrant unregister, plus the real DLL ABI.
+  Does not change default devices or open recording/playback streams.
 - `playfab-session-probe.c`: pinned threading ABI checks, asynchronous test-only
   dialog choices, preserved title callbacks, retained synthetic users, caller
   Manual completion queue, genuine upload failure and acknowledged upload before

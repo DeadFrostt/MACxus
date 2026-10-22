@@ -192,7 +192,10 @@ function bundleReferences(product: Record<string, unknown> | undefined): BundleR
   return [...references].map(([productId, primary]) => ({ productId, primary }));
 }
 
-function packageSupport(productId: string, details: Map<string, Record<string, unknown>>, visited = new Set<string>()): PackageSupport {
+function packageSupport(productId: string, details: Map<string, Record<string, unknown>>, visited = new Set<string>(), budget = { remaining: 512 }): PackageSupport {
+  if (visited.size > 6 || budget.remaining-- <= 0) return {
+    installability: 'unknown', supportNote: 'The Store bundle metadata could not be fully resolved.',
+  };
   const product = details.get(productId);
   const direct = directPackageSupport(product);
   if (direct) return direct;
@@ -208,7 +211,7 @@ function packageSupport(productId: string, details: Map<string, Record<string, u
   const nextVisited = new Set(visited).add(productId);
   const references = bundleReferences(product);
   if (references.length > 1) {
-    const resolved = references.map(reference => packageSupport(reference.productId, details, nextVisited));
+    const resolved = references.map(reference => packageSupport(reference.productId, details, nextVisited, budget));
     if (resolved.some(item => item.installability === 'supported')) return {
       installability: 'supported', packageFormat: 'MSIXVC',
       supportNote: 'This Store offer contains multiple products. Choose a verified PC package before installing. Ownership is checked by Xodus.',
@@ -225,7 +228,7 @@ function packageSupport(productId: string, details: Map<string, Record<string, u
       : 'No Windows.Desktop MSIXVC package or resolvable primary bundle product was found. It may be an add-on or console-only product.',
   };
 
-  const resolved = packageSupport(candidates[0].productId, details, nextVisited);
+  const resolved = packageSupport(candidates[0].productId, details, nextVisited, budget);
   if (resolved.installability !== 'supported') return {
     ...resolved,
     supportNote: `The Store offer points to ${candidates[0].productId}, but ${resolved.supportNote.charAt(0).toLowerCase()}${resolved.supportNote.slice(1)}`,
@@ -305,7 +308,7 @@ export class CatalogService {
   /** Resolve licensed IDs, never search results or an install-history guess. */
   async licensedProducts(ids: string[], rawMarket: string): Promise<CatalogProduct[]> {
     if (ids.length > 60 || ids.some(id => !/^[A-Z0-9]{12}$/.test(id))) throw Error('Invalid licensed product list.');
-    const catalog = await this.details(ids, normalizeMarket(rawMarket), true);
+    const catalog = await this.licensedDetails(ids, normalizeMarket(rawMarket));
     const wanted = new Set(ids);
     const rows = (Array.isArray(catalog.Products) ? catalog.Products : []).flatMap(entry => {
       const product = object(entry);
@@ -317,15 +320,72 @@ export class CatalogService {
         const uri = string(purposes.flatMap(purpose => images.filter(image => image.ImagePurpose === purpose))[0]?.Uri);
         return uri?.startsWith('//') ? `https:${uri}` : uri;
       };
-      return [{ productId: id, title: localized?.ProductTitle, description: localized?.ProductDescription,
+      return [{ productId: id, title: string(localized?.ProductTitle) ?? id, description: localized?.ProductDescription,
         publisherName: localized?.PublisherName, boxArtUrl: find(POSTER_PURPOSES), isGame: true }];
     });
-    // Entitlement does not imply a PC package or supported format. Only a real
-    // unambiguous Windows.Desktop MSIXVC target can be "Ready to install".
-    return parseCatalogProducts({ productsList: rows }, catalog).filter(product => product.installability === 'supported');
+    // Ownership and installation support are independent. Preserve the game's
+    // real package status for the library badge and Ready to install filter.
+    return parseCatalogProducts({ productsList: rows }, catalog);
   }
 
-  private async details(ids: string[], market: string, required = false): Promise<DisplayCatalogResponse> {
+  private async fetchDetails(batch: string[], market: string): Promise<Record<string, unknown>[]> {
+    const url = new URL('https://displaycatalog.mp.microsoft.com/v7.0/products');
+    url.searchParams.set('bigIds', batch.join(','));
+    url.searchParams.set('market', market);
+    url.searchParams.set('languages', 'en-us,neutral');
+    const response = await this.fetcher(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
+    if (!response.ok) throw Error('Catalog request failed.');
+    const catalog = await response.json() as DisplayCatalogResponse;
+    if (!catalog || !Array.isArray(catalog.Products)) throw Error('Invalid catalog response.');
+    return catalog.Products.flatMap(entry => {
+      const record = object(entry), id = string(record?.ProductId)?.toUpperCase();
+      return record && id && batch.includes(id) ? [record] : [];
+    });
+  }
+
+  /** Each licensed root gets its own bounded graph; unrelated editions cannot
+   * starve its PC package. Shared children are still fetched only once. */
+  private async licensedDetails(ids: string[], market: string): Promise<DisplayCatalogResponse> {
+    const details = new Map<string, Record<string, unknown>>(), fetched = new Set<string>();
+    const roots = [...new Set(ids)];
+    const seen = roots.map(root => new Set([root]));
+    let frontiers = roots.map(root => [root]);
+    for (let depth = 0; depth <= 6 && frontiers.some(frontier => frontier.length); depth++) {
+      const pending = [...new Set(frontiers.flat())].filter(id => !fetched.has(id));
+      const batches: string[][] = [];
+      for (let offset = 0; offset < pending.length; offset += 25) batches.push(pending.slice(offset, offset + 25));
+      let nextBatch = 0, stopped = false;
+      try {
+        await Promise.all(Array.from({ length: Math.min(4, batches.length) }, async () => {
+          while (!stopped && nextBatch < batches.length) {
+            const batch = batches[nextBatch++];
+            let products: Record<string, unknown>[];
+            try { products = await this.fetchDetails(batch, market); }
+            catch (error) { stopped = true; throw error; }
+            for (const product of products) details.set(string(product.ProductId)!.toUpperCase(), product);
+            for (const id of batch) fetched.add(id);
+          }
+        }));
+      } catch { throw Error('Microsoft Store game details could not be loaded. Check your connection and retry the library.'); }
+      frontiers = frontiers.map((frontier, root) => {
+        const next: string[] = [];
+        if (depth === 6) return next;
+        for (const id of frontier) {
+          const product = details.get(id);
+          // A direct desktop package defines the product, even if unsupported.
+          if (!product || directPackageSupport(product)) continue;
+          for (const child of bundleReferences(product)) {
+            if (seen[root].size >= 48) break;
+            if (!seen[root].has(child.productId)) { seen[root].add(child.productId); next.push(child.productId); }
+          }
+        }
+        return next;
+      });
+    }
+    return { Products: [...details.values()] };
+  }
+
+  private async details(ids: string[], market: string): Promise<DisplayCatalogResponse> {
     const details = new Map<string, Record<string, unknown>>();
     let pending = ids.filter((value, index, values) => values.indexOf(value) === index);
     for (let depth = 0; depth < 4 && pending.length > 0 && details.size < 100; depth += 1) {
@@ -333,26 +393,15 @@ export class CatalogService {
       for (let offset = 0; offset < pending.length; offset += 25) {
         const batch = pending.slice(offset, offset + 25).filter((id) => !details.has(id));
         if (batch.length === 0) continue;
-        const detailsUrl = new URL('https://displaycatalog.mp.microsoft.com/v7.0/products');
-        detailsUrl.searchParams.set('bigIds', batch.join(','));
-        detailsUrl.searchParams.set('market', market);
-        detailsUrl.searchParams.set('languages', 'en-us,neutral');
         try {
-          const response = await this.fetcher(detailsUrl, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
-          if (!response.ok) throw Error('Catalog request failed.');
-          const catalog = await response.json() as DisplayCatalogResponse;
-          if (!catalog || !Array.isArray(catalog.Products)) throw Error('Invalid catalog response.');
-          for (const entry of Array.isArray(catalog.Products) ? catalog.Products : []) {
-            const record = object(entry);
-            const id = string(record?.ProductId)?.toUpperCase();
-            if (!id || !record) continue;
+          for (const record of await this.fetchDetails(batch, market)) {
+            const id = string(record.ProductId)!.toUpperCase();
             details.set(id, record);
             for (const reference of bundleReferences(record)) {
               if (!details.has(reference.productId) && details.size + next.size < 100) next.add(reference.productId);
             }
           }
         } catch {
-          if (required) throw Error('Microsoft Store game details could not be loaded. Check your connection and retry the library.');
           // Cards remain visible even when display catalog enrichment is unavailable.
         }
       }
