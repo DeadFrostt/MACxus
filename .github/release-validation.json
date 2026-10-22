@@ -3,6 +3,36 @@
   "approvals": [
     {
       "kind": "launcher",
+      "runId": "39830729086",
+      "commit": "0e2a75a4334d9d8af72e0c452af4010276bc3392",
+      "manifestSha256": "e6f9dd4754b0ddd712a55c6334b78e175aebdce6cd0611e44f8545e67cb90418",
+      "notesSha256": "9ed2f6244d209a337f335878906f57eea9ecad1143e31f28e12aba1504f89fbb",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Human explicitly approved the English notes and stable promotion on 2026-10-22, authorized one isolated final-CI Deep Rock Galactic test with normal Xbox cloud synchronization, and confirmed startup, a populated online server browser and normal quit. Exact original launcher0.3.11/backend0.2.11 candidates and runtime11.0-20261022-gf4adc821 passed manifest, binary/source SHA256/SHA512, recipe and packaged-component verification. Runtime CI passed 33 native contract invocations, HTTP/TLS, media and DXVK tests. The separate game clone and fresh prefix used the exact final components; five loaded prefix DLL hashes matched CI. Game, launcher and account service exited0, content license returned200, bridge and cloud were ready, and no scoped process or session remained. Original game/prefix, production pointers and candidate/component hashes stayed unchanged. Two pre-existing partner-token HTTP400 messages remain deferred. Full gameplay, joined matches, voice chat and independent cloud roundtrip are not claimed. Publish these exact tested bytes with the separately digest-bound approved notes, without rebuilding or changing production pointers."
+    },
+    {
+      "kind": "backend",
+      "runId": "39830729016",
+      "commit": "0e2a75a4334d9d8af72e0c452af4010276bc3392",
+      "manifestSha256": "fbd2c90202d5f7b419c77e1cf9c8eed51e3a46c1376d3582395972f5f8df9f0a",
+      "notesSha256": "adc97afb9c358bf4bd0040e9c5b65af1bebbf4152e6731b3daeea2655260581b",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Human explicitly approved the English notes and stable promotion on 2026-10-22, authorized one isolated final-CI Deep Rock Galactic test with normal Xbox cloud synchronization, and confirmed startup, a populated online server browser and normal quit. Original backend0.2.11 CI39830729016 passed pinned Rust1.99.0 native tests; its manifest, binary/source SHA256/SHA512, three extracted files and 42 corresponding recipe files matched. Exact launcher39830729086 and runtime39838907214 were used with a separate game clone and fresh prefix. Game, launcher and account service exited0, content license returned200 and bridge/cloud were ready. Original game/prefix and production pointers, candidate and component hashes stayed unchanged, with zero scoped processes or service sessions after cleanup. Two pre-existing partner-token HTTP400 messages remain deferred, despite the populated browser. No full gameplay, joined match, voice or independent cloud-roundtrip claim. Publish only these original tested bytes and digest-bound reviewed notes, without rebuilding or local production activation."
+    },
+    {
+      "kind": "runtime",
+      "runId": "39838907214",
+      "commit": "f4adc821ecd25083412b0a3c213586d120b6cc59",
+      "manifestSha256": "8d85428b3842620f59e5254c01c868a70bd79d759c1c40df42b4d8011ce17bc3",
+      "notesSha256": "4ae64d267b3324295e9c4f74218c6be7364380fc47bcb7b6de993e4bb8ea0e09",
+      "approved": true,
+      "approvedBy": "domsvoboda",
+      "evidence": "Human explicitly approved the English notes and stable promotion on 2026-10-22, authorized the final isolated Deep Rock Galactic test with normal Xbox cloud synchronization, and confirmed startup, a populated online server browser and normal quit. Selected main runtime CI39838907214 succeeded after a separately authorized CI-only Ubuntu mirror repair; the two cancelled earlier runtimes are not candidates. Exact runtime11.0-20261022-gf4adc821 manifest, binary/corresponding-source SHA256/SHA512, all DLL/media/compatibility hashes, pinned base Wine/server, 42 patches and 53 recipe files were verified. All 33 native contract invocations, HTTP/TLS, media and DXVK tests passed. Tested unchanged runtime with original launcher39830729086/backend39830729016, separate game clone/fresh prefix; five loaded prefix DLLs matched. Game/launcher/service exited0, license200 and bridge/cloud ready; original game/prefix and production pointers unchanged, candidate/component hashes unchanged and zero scoped processes/sessions. Two pre-existing partner-token HTTP400 messages remain deferred. No full gameplay, joined match, voice or independent cloud roundtrip claim. Approval changes only runtime release-status metadata; preserve source/base/media/build inputs and publish these exact tested bytes without rebuilding or local production activation."
+    },
+    {
+      "kind": "launcher",
       "runId": "39651641231",
       "commit": "56780276d25c5ec8d00e709abb98b0d99e7c81bd",
       "manifestSha256": "ba65053cf321838b50f7e4af3dc842949f83e8bcc482542dca06f3a54dee6c37",
