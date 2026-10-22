@@ -42,10 +42,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Install media build prerequisites
+        timeout-minutes: 15
+        run: |
+          sudo "$(command -v node)" scripts/ci/ubuntu-mirror.mjs
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends build-essential curl xz-utils
       - name: Build portable pinned LGPL FFmpeg libraries
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends build-essential curl xz-utils
           node scripts/build-runtime-media.mjs --work "$PWD/media-build" --jobs 4
           node scripts/ci/check-media-glibc.mjs media-build/media-manifest.json
       - uses: actions/upload-artifact@v4
@@ -66,9 +70,11 @@ jobs:
           node-version: '22'
 
       - name: Install build and test prerequisites
+        timeout-minutes: 15
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          sudo "$(command -v node)" scripts/ci/ubuntu-mirror.mjs
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends \
             build-essential gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 glslang-tools flex bison autoconf automake libtool libjson-perl wine64-tools cmake \
             pkg-config python3 perl rsync file gh curl tar xz-utils openssl xvfb xauth ripgrep \
             libfreetype-dev libgnutls28-dev libvulkan1 mesa-vulkan-drivers libx11-6 \
