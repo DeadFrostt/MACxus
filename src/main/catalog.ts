@@ -305,7 +305,7 @@ export class CatalogService {
   /** Resolve licensed IDs, never search results or an install-history guess. */
   async licensedProducts(ids: string[], rawMarket: string): Promise<CatalogProduct[]> {
     if (ids.length > 60 || ids.some(id => !/^[A-Z0-9]{12}$/.test(id))) throw Error('Invalid licensed product list.');
-    const catalog = await this.details(ids, normalizeMarket(rawMarket), true);
+    const catalog = await this.licensedDetails(ids, normalizeMarket(rawMarket));
     const wanted = new Set(ids);
     const rows = (Array.isArray(catalog.Products) ? catalog.Products : []).flatMap(entry => {
       const product = object(entry);
@@ -325,7 +325,61 @@ export class CatalogService {
     return parseCatalogProducts({ productsList: rows }, catalog).filter(product => product.installability === 'supported');
   }
 
-  private async details(ids: string[], market: string, required = false): Promise<DisplayCatalogResponse> {
+  private async fetchDetails(batch: string[], market: string): Promise<Record<string, unknown>[]> {
+    const url = new URL('https://displaycatalog.mp.microsoft.com/v7.0/products');
+    url.searchParams.set('bigIds', batch.join(','));
+    url.searchParams.set('market', market);
+    url.searchParams.set('languages', 'en-us,neutral');
+    const response = await this.fetcher(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
+    if (!response.ok) throw Error('Catalog request failed.');
+    const catalog = await response.json() as DisplayCatalogResponse;
+    if (!catalog || !Array.isArray(catalog.Products)) throw Error('Invalid catalog response.');
+    return catalog.Products.flatMap(entry => {
+      const record = object(entry), id = string(record?.ProductId)?.toUpperCase();
+      return record && id && batch.includes(id) ? [record] : [];
+    });
+  }
+
+  /** Each licensed root gets its own bounded graph; unrelated editions cannot
+   * starve its PC package. Shared children are still fetched only once. */
+  private async licensedDetails(ids: string[], market: string): Promise<DisplayCatalogResponse> {
+    const details = new Map<string, Record<string, unknown>>(), fetched = new Set<string>();
+    const roots = [...new Set(ids)];
+    const seen = roots.map(root => new Set([root]));
+    let frontiers = roots.map(root => [root]);
+    for (let depth = 0; depth <= 6 && frontiers.some(frontier => frontier.length); depth++) {
+      const pending = [...new Set(frontiers.flat())].filter(id => !fetched.has(id));
+      const batches: string[][] = [];
+      for (let offset = 0; offset < pending.length; offset += 25) batches.push(pending.slice(offset, offset + 25));
+      let nextBatch = 0;
+      try {
+        await Promise.all(Array.from({ length: Math.min(4, batches.length) }, async () => {
+          while (nextBatch < batches.length) {
+            const batch = batches[nextBatch++];
+            for (const product of await this.fetchDetails(batch, market)) details.set(string(product.ProductId)!.toUpperCase(), product);
+            for (const id of batch) fetched.add(id);
+          }
+        }));
+      } catch { throw Error('Microsoft Store game details could not be loaded. Check your connection and retry the library.'); }
+      frontiers = frontiers.map((frontier, root) => {
+        const next: string[] = [];
+        if (depth === 6) return next;
+        for (const id of frontier) {
+          const product = details.get(id);
+          // A direct desktop package defines the product, even if unsupported.
+          if (!product || directPackageSupport(product)) continue;
+          for (const child of bundleReferences(product)) {
+            if (seen[root].size >= 48) break;
+            if (!seen[root].has(child.productId)) { seen[root].add(child.productId); next.push(child.productId); }
+          }
+        }
+        return next;
+      });
+    }
+    return { Products: [...details.values()] };
+  }
+
+  private async details(ids: string[], market: string): Promise<DisplayCatalogResponse> {
     const details = new Map<string, Record<string, unknown>>();
     let pending = ids.filter((value, index, values) => values.indexOf(value) === index);
     for (let depth = 0; depth < 4 && pending.length > 0 && details.size < 100; depth += 1) {
@@ -333,26 +387,15 @@ export class CatalogService {
       for (let offset = 0; offset < pending.length; offset += 25) {
         const batch = pending.slice(offset, offset + 25).filter((id) => !details.has(id));
         if (batch.length === 0) continue;
-        const detailsUrl = new URL('https://displaycatalog.mp.microsoft.com/v7.0/products');
-        detailsUrl.searchParams.set('bigIds', batch.join(','));
-        detailsUrl.searchParams.set('market', market);
-        detailsUrl.searchParams.set('languages', 'en-us,neutral');
         try {
-          const response = await this.fetcher(detailsUrl, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
-          if (!response.ok) throw Error('Catalog request failed.');
-          const catalog = await response.json() as DisplayCatalogResponse;
-          if (!catalog || !Array.isArray(catalog.Products)) throw Error('Invalid catalog response.');
-          for (const entry of Array.isArray(catalog.Products) ? catalog.Products : []) {
-            const record = object(entry);
-            const id = string(record?.ProductId)?.toUpperCase();
-            if (!id || !record) continue;
+          for (const record of await this.fetchDetails(batch, market)) {
+            const id = string(record.ProductId)!.toUpperCase();
             details.set(id, record);
             for (const reference of bundleReferences(record)) {
               if (!details.has(reference.productId) && details.size + next.size < 100) next.add(reference.productId);
             }
           }
         } catch {
-          if (required) throw Error('Microsoft Store game details could not be loaded. Check your connection and retry the library.');
           // Cards remain visible even when display catalog enrichment is unavailable.
         }
       }
