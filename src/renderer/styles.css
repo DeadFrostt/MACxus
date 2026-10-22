@@ -136,6 +136,8 @@ html:not([data-gamepad-navigation]) [data-gamepad-card]:has(> :is(.library-card,
 .game-update-status p { font-size: 11px; padding: 0 16px; }
 .game-dialog.diagnostic-dialog { width: min(1000px, 94vw); }
 .diagnostic-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 65vh; overflow: auto; background: #16191e; padding: 14px; font-size: 11px; user-select: text; }
+.diagnostic-report-editor { display: grid; gap: 8px; }
+.diagnostic-report-editor textarea { width: 100%; height: min(50vh, 480px); resize: vertical; font: 11px monospace; white-space: pre; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; flex: 0 0 auto; }
 .status-dot.amber { background: #e5b84e; box-shadow: 0 0 7px rgba(229,184,78,.4); }
 .status-dot.red { background: #e56868; box-shadow: none; }

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Export a reviewable diagnostic report with versions, system information and selected logs, with automatic redaction and local saving.
 - Support adding Steam shortcuts to large imported libraries without changing existing entries.
 - Prevent permissive directory permissions from blocking managed Proton prefixes at game startup.
 - Resolve game and add-on bundles using explicit contents instead of unrelated licensing offers, and report precise Store metadata errors.

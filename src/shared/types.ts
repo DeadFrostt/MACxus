@@ -203,6 +203,7 @@ export interface GameUpdate {
 }
 
 export interface DiagnosticLog { name: string; content: string; truncated: boolean }
+export interface DiagnosticReport { name: string; content: string }
 
 export interface KeyringStatus {
   canCreate?: boolean;
@@ -370,6 +371,8 @@ export interface LauncherApi {
   copyDiagnosticLog(operationId: string): Promise<void>;
   revealDiagnosticLog(operationId: string): Promise<void>;
   readBackendDiagnosticLog(): Promise<DiagnosticLog>;
+  createDiagnosticReport(gameId?: string): Promise<DiagnosticReport>;
+  saveDiagnosticReport(content: string): Promise<boolean>;
   login(): Promise<void>;
   logout(): Promise<void>;
   searchCatalog(query: string, cursor?: string): Promise<CatalogSearchResult>;

@@ -17,4 +17,6 @@ it('delivers automatic wallet status and removes exactly its own preload listene
   expect(callback).toHaveBeenCalledWith(status);
   dispose(); expect(removeListener).toHaveBeenCalledWith('keyring-state', listener);
   api.createKeyringCollection(); expect(invoke).toHaveBeenCalledWith('keyring-create');
+  api.createDiagnosticReport('0123456789abcdef'); expect(invoke).toHaveBeenCalledWith('create-diagnostic-report', '0123456789abcdef');
+  api.saveDiagnosticReport('reviewed text'); expect(invoke).toHaveBeenCalledWith('save-diagnostic-report', 'reviewed text');
 });

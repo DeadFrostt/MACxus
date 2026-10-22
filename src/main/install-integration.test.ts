@@ -17,6 +17,7 @@ const h = vi.hoisted(() => ({
   blockDisplay: vi.fn(() => 7), releaseDisplay: vi.fn(() => true),
   steamProfiles: [] as string[], steamIsRunning: true,
   liveImport: vi.fn(), offlineImport: vi.fn(), showMessage: vi.fn(),
+  showSave: vi.fn(),
   trash: vi.fn(), deleteFiles: vi.fn(), removeShortcut: vi.fn(async () => {}), signals: [] as string[],
   notifications: [] as { title: string; body: string }[],
   holdCancellation: false,
@@ -33,7 +34,7 @@ vi.mock('electron', () => ({
   BrowserWindow: class { webContents = { on: vi.fn(), send: vi.fn(), setWindowOpenHandler: vi.fn() };
     on() {} once() {} show() {} focus() {} isDestroyed() { return false; } async loadFile() {} },
   screen: { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1440, height: 900 } }) },
-  dialog: { showMessageBox: h.showMessage }, nativeImage: {}, shell: { trashItem: h.trash }, powerSaveBlocker: { start: h.blockDisplay, stop: h.releaseDisplay },
+  dialog: { showMessageBox: h.showMessage, showSaveDialog: h.showSave }, nativeImage: {}, shell: { trashItem: h.trash }, powerSaveBlocker: { start: h.blockDisplay, stop: h.releaseDisplay },
 }));
 vi.mock('./backend.js', () => ({ LINUX_RUN_PATCH: 'test-patch', BackendManager: class {
   get current() { return h.backend; } async refresh() {} async checkUpdate() {} async externalDownloadRunning() { return false; }
@@ -115,6 +116,25 @@ afterAll(async () => {
   h.game?.finish(); for (const job of h.downloads) job.finish(130);
   await new Promise(resolve => setTimeout(resolve, 50));
   await fs.rm(h.root, { recursive: true, force: true });
+});
+
+it('diagnostic IPC previews without a save/upload, saves exactly reviewed text and honors cancellation', async () => {
+  const downloadsBefore = h.downloads.length;
+  const report = await ipc('create-diagnostic-report');
+  expect(report.content).toContain('Launcher: 0.0.0'); expect(report.content).toContain('Backend:');
+  expect(report.content).not.toContain('sample@example.test');
+  expect(h.showSave).not.toHaveBeenCalled(); expect(h.downloads).toHaveLength(downloadsBefore);
+  await expect(ipc('create-diagnostic-report', '../private')).rejects.toThrow('Game not found');
+  h.showSave.mockResolvedValueOnce({ canceled: true });
+  expect(await ipc('save-diagnostic-report', 'edited report')).toBe(false);
+  const file = path.join(h.root, 'reviewed-report.txt');
+  h.showSave.mockResolvedValueOnce({ canceled: false, filePath: file });
+  expect(await ipc('save-diagnostic-report', 'reviewed text only')).toBe(true);
+  expect(await fs.readFile(file, 'utf8')).toBe('reviewed text only');
+  expect((await fs.stat(file)).mode & 0o777).toBe(0o600);
+  const calls = h.showSave.mock.calls.length;
+  await expect(ipc('save-diagnostic-report', { content: 'invalid' })).rejects.toThrow('Invalid');
+  expect(h.showSave).toHaveBeenCalledTimes(calls);
 });
 
 it('real account-refresh IPC shares status reads and cannot publish a late old backend response', async () => {
