@@ -1,8 +1,15 @@
 # Xodus Nexus 0.3.11
 
-This is a technical update focused on sign-in, game-library reliability, launch preparation and diagnostics.
+This is another technical update focused on licensing, sign-in and the overall functionality of the launcher.
 
-- Fix missing owned editions when loading multiple Store bundles. Owned games with unsupported packages remain visible with an **Unsupported** badge and installation disabled.
+I'm aware of the growing number of reports about games not working, and I'd like to focus on game compatibility and those reported issues in the next update.
+
+## What's changed
+
+- Improve content-license requests for accounts using JWE tickets.
+- Fix Microsoft sign-in getting stuck on **Please wait**.
+- Improve bundle and edition resolution, including owned games missing from My Library.
+- Keep owned games with unsupported packages visible with an **Unsupported** badge and installation disabled.
 - Fully clear saved credentials and local device registration on **Sign out**. **Sign in again** keeps the existing device registration.
 - Fix permissions that could prevent managed Proton prefixes from starting games.
 - Support adding Nexus shortcuts to large Steam libraries without changing existing entries.

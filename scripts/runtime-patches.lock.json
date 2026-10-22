@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "development",
+  "status": "release",
   "dxvkSourceLockSha256": "7913820bf93ee49df4d8c917928392b296159f7a93df9dad40b03b934bb5dc30",
   "sources": {
     "wine": {
