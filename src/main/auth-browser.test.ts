@@ -1,8 +1,35 @@
 import { describe, expect, it, vi } from 'vitest';
 import vm from 'node:vm';
 import { browserBindingAllowed, browserRequestHeaders, installBrowserAuthBridge } from './auth-browser';
+import { authFrame, AUTH_PREFIX } from './auth-protocol';
 const frame = { type: 'open' as const, session: 1, url: 'https://login.live.com/ppsecure/InlineLogin.srf', headers: { hostapp: 'CloudExperienceHost' } };
 describe('browser auth trust boundaries', () => {
+  it('forwards all second-leg broker headers without widening document or redirect trust (#260)', () => {
+    const headers = {
+      'cxh-capabilities': '{"PrivatePropertyBag":1,"PasswordlessConnect":1,"PreferAssociate":1,"ChromelessUI":0}',
+      'cxh-correlationid': '17540444-ea13-46c5-b8c2-77a2b1cc2e47',
+      'cxh-msabinaryversion': '55', 'cxh-identityclientbinaryversion': '3',
+      'cxh-osversioninfo': '{"platformId":2,"majorVersion":10,"minorVersion":0,"buildNumber":26100}',
+      'cxh-platform': 'CloudExperienceHost.Platform.DESKTOP',
+      'cxh-protocol': 'TokenBroker', 'cxh-source': 'TokenBroker', hostapp: 'CloudExperienceHost',
+    };
+    const second = authFrame(AUTH_PREFIX + JSON.stringify({ ...frame, session: 2,
+      url: 'https://login.live.com/ppsecure/inlineconnect.srf?synthetic=1', headers }));
+    if (second?.type !== 'open') throw Error('Expected second-leg open frame');
+    const request = { frameId: 'second-frame', resourceType: 'Document', request: {
+      url: second.url, headers: { Accept: 'text/html', HostApp: 'old' },
+    } };
+    expect(browserRequestHeaders(request, 'second-frame', second)).toEqual([
+      { name: 'Accept', value: 'text/html' },
+      ...Object.entries(headers).map(([name, value]) => ({ name, value })),
+    ]);
+    for (const other of [
+      { ...request, frameId: 'iframe' }, { ...request, resourceType: 'XHR' },
+      { ...request, request: { ...request.request, url: 'https://login.live.com/redirect' } },
+      { ...request, request: { ...request.request, url: 'https://example.invalid/' } },
+    ]) expect(browserRequestHeaders(other, 'second-frame', second)).toBeUndefined();
+    expect(browserRequestHeaders(request, 'second-frame', frame)).toBeUndefined();
+  });
   it('accepts only the active top-level main-world Microsoft context', () => {
     const context = { origin: 'https://login.live.com', auxData: { isDefault: true, frameId: 'own-frame' } };
     expect(browserBindingAllowed(context, 'own-frame', frame)).toBe(true);

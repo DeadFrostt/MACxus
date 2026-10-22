@@ -36,6 +36,26 @@ test('bundle resolution follows declared contents and preserves contributor regr
   assert.ok(patch.includes("skeltavik"));
 });
 
+test('both Microsoft sign-in steps retain broker identity without changing credentials or UI trust (#260)', async () => {
+  const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
+  const entry = lock.patches.find(p => p.file === 'xodus-hosted-signin.patch');
+  assert.ok(entry);
+  const patch = await fs.readFile(`assets/${entry.file}`, 'utf8');
+  assert.equal(createHash('sha256').update(patch).digest('hex'), entry.sha256);
+  const files = [...patch.matchAll(/^diff --git a\/(\S+) b\/\S+$/gm)].map(match => match[1]);
+  assert.deepEqual(files.sort(), [
+    'crates/xodus-cli/src/webview.rs', 'crates/xodus-cli/src/webview_stdio.rs',
+    'crates/xodus-cli/src/webview_host_tests.rs',
+  ].sort());
+  for (const expected of ['hosted_signin_both_legs_keep_all_nine_headers_and_exact_targets',
+    'hosted_signin_correlation_is_a_fresh_uuid_for_every_request',
+    'hosted_signin_transport_emits_complete_headers_on_the_second_leg']) assert.ok(patch.includes(expected), expected);
+  assert.equal((patch.match(/^\+fn host_headers\(\) -> HeaderMap/gm) ?? []).length, 2);
+  assert.equal((patch.match(/^\+mod hosted_signin_tests;/gm) ?? []).length, 2);
+  assert.doesNotMatch(patch, /diff --git a\/.*(?:tokens\/|login\.rs|license\.rs|keyring|auth-protocol|auth-browser|auth-window)/);
+  assert.ok(patch.includes("Wyze3306"));
+});
+
 test('JWE support changes only licensing ticket formatting, not Xbox or Store authentication (#294)', async () => {
   const lock = JSON.parse(await fs.readFile('assets/backend-source.lock.json', 'utf8'));
   const entry = lock.patches.find(p => p.file === 'xodus-licensing-jwe.patch');
