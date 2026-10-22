@@ -191,6 +191,10 @@
     {
       "file": "assets/xgameruntime-gamesave-transactions.patch",
       "sha256": "cef4e8bdbd3bb846afc71846fdbc1632ef57cfec3b6e45c066f73edc5c7ab948"
+    },
+    {
+      "file": "assets/xgameruntime-save-upload-completion.patch",
+      "sha256": "618f95a3561eaa9c9702adf325b8e31fc16759e0b413980d311c960d6e3181f5"
     }
   ],
   "expectedWineSources": {
@@ -210,7 +214,7 @@
     "dlls/xgameruntime/xgameinvite.c": "43c3459101f7da3a4bc6569d361f2d5f63f6a0e70006a0472c4ccb6f9bece41f",
     "dlls/xgameruntime/xgameprotocol.c": "6936d5e24532832ee2e6928ea3a9a5217f8df830588b2e6e92920dd2cf1532d3",
     "dlls/xgameruntime/xgameruntime.spec": "8e77261cdc459d2fe688c210c8024ee8eeb09057e679c3a38de941fde1a00d73",
-    "dlls/xgameruntime/xgamesave.c": "96e6653cee4d86fdefdc0f0be5c16f9633afe0aca2b225318d9933ded8b7876a",
+    "dlls/xgameruntime/xgamesave.c": "e5122eee6fd6d83bc6c2ff24f9ec8bac2cb145d840b752b28e2277190d95bd67",
     "dlls/xgameruntime/xgamesave-transactions.h": "c4ecbbcfd0dec8af931bf033f3e7612e0e62e123231245d33d614c8f3e1b764b",
     "dlls/xgameruntime/xgamesave.idl": "544319e88951f65b21c74f785fb9376c10cac8b1d57e98c7aa3079348162ccab",
     "dlls/xgameruntime/xnetworking.c": "cfd8d0110b7ebd622f62317d3134dd866e6538e4a697b06912fa752517fe7caa",

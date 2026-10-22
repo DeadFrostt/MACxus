@@ -94,6 +94,10 @@ The runtime does not provide a unique platform device identifier.
   transport. Checks both provider formats, incomplete transfers, malformed
   metadata, unuploaded-local conflicts, replacement rollback and recovery copies.
   Network and account helpers are test-only stubs. No real saves are accessed.
+- `gamesave-transfer-probe.c`: actual upload, close and synchronization helpers
+  with two isolated device roots and a closed memory transport. Checks delayed
+  completion, overlapping revisions, failed transfers, durable retries and
+  session-release notifications without contacting cloud services.
 - `playfab-session-probe.c`: pinned threading ABI checks, asynchronous test-only
   dialog choices, preserved title callbacks, retained synthetic users, caller
   Manual completion queue, genuine upload failure and acknowledged upload before

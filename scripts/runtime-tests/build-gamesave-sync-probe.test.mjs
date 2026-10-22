@@ -17,7 +17,8 @@ test('save sync probe uses actual pinned source and matching Wine UCRT', () => {
 test('save probe rejects a mixed CRT instead of accepting an untested binary', () => {
   const calls = [];
   buildSaveSyncProbe(options, (...args) => { calls.push(args); return 'DLL Name: ucrtbase.dll'; });
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 4);
+  assert.ok(calls[2][1].includes('/tmp/project/scripts/runtime-tests/gamesave-transfer-probe.c'));
   for (const headers of ['', 'DLL Name: msvcrt.dll', 'DLL Name: ucrtbase.dll\nDLL Name: msvcr120.dll'])
     assert.throws(() => buildSaveSyncProbe(options, () => headers), /Wine UCRT/);
 });
