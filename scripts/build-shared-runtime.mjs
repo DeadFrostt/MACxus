@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { buildCompatibility } from './runtime-compat/build.mjs';
 import { buildPlayFabSessionProbe } from './runtime-tests/build-playfab-session.mjs';
 import { buildStoreProbes } from './runtime-tests/build-store-probes.mjs';
+import { buildSaveSyncProbe } from './runtime-tests/build-gamesave-sync-probe.mjs';
 import { buildUserPrivilegeProbe } from './runtime-tests/build-user-privilege-probe.mjs';
 import { buildRuntimeDxvk } from './build-runtime-dxvk.mjs';
 
@@ -209,6 +210,7 @@ await buildUserPrivilegeProbe({ source, build, tests, project }, run);
 // Compile the exact entitlement helpers with a test-only failing license bridge.
 // Its synthetic signing key never changes production trust or reaches packaging.
 buildStoreProbes({ build, source, tests, project }, run);
+buildSaveSyncProbe({ build, source, tests, project }, run);
 // Ubuntu's older MinGW SDK need not contain windows.data.json.h at all.
 run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-I', path.join(build, 'include'), '-I', path.join(source, 'include'), path.join(project, 'scripts/runtime-tests/winrt-json-probe.c'), '-o', path.join(tests, 'winrt-json-probe.exe'), '-lruntimeobject'], work);
 await fs.copyFile(path.join(ngSource, 'COPYING'), path.join(components, 'nghttp2-LICENSE'));

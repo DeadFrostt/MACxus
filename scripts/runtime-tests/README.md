@@ -90,6 +90,10 @@ The runtime does not provide a unique platform device identifier.
   selected synthetic layout, overlapping FileGroups/selectors, empty and sparse
   files, unknown size, invalidated metadata and byte-only progress notifications.
   Counts declared destinations only, without reading file contents or licensing.
+- `gamesave-sync-probe.c`: actual save implementation with a closed synthetic
+  transport. Checks both provider formats, incomplete transfers, malformed
+  metadata, unuploaded-local conflicts, replacement rollback and recovery copies.
+  Network and account helpers are test-only stubs. No real saves are accessed.
 - `playfab-session-probe.c`: pinned threading ABI checks, asynchronous test-only
   dialog choices, preserved title callbacks, retained synthetic users, caller
   Manual completion queue, genuine upload failure and acknowledged upload before
