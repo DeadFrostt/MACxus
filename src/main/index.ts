@@ -429,7 +429,9 @@ async function runAuth(command: 'login' | 'logout'): Promise<void> {
     await accountProfile.select(undefined);
     if (shutdownStarted) throw Error('The launcher is closing.');
     const tracked = command === 'login' ? startAuthTransport(binary, view)
-      : spawnTracked(binary, [command], { onLine: (line) => emitLog('auth', line) });
+      // Explicit sign-out removes the local device registration too. Ordinary
+      // sign-in must keep it, including when renewing an existing account.
+      : spawnTracked(binary, ['logout', '--device'], { onLine: (line) => emitLog('auth', line) });
     operations.set(id, tracked.child);
     const result = await tracked.result;
     accountRefresh.invalidate();

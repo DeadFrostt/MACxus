@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fully remove saved sign-in credentials and local device registration on Sign out; keep device registration when using Sign in again.
 - Preserve local save containers when cloud transfers fail or conflict with unuploaded changes, and reject incomplete cloud metadata.
 - Report real installed package byte totals and unknown-size states instead of zero-sized progress for nonempty games.
 - Export a reviewable diagnostic report with versions, system information and selected logs, with automatic redaction and local saving.
