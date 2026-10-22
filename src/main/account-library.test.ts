@@ -11,6 +11,25 @@ const row=(productId=A, extra={})=>({productId,status:'Active',isTrial:false,sha
 const output=(entries=[row()],account='one@example.test',market='US')=>JSON.stringify({schema:1,account,market,checkedAt:new Date().toISOString(),entitlements:entries});
 const product=(productId:string):CatalogProduct=>({productId,title:productId,description:'',categories:[],installability:'supported',supportNote:''});
 
+it('keeps unsupported and unknown owned games separate from Game Pass without exposing add-ons or unlicensed products', async () => {
+  const D = '9DDDDDDDDDDD', E = '9EEEEEEEEEEE', F = '9FFFFFFFFFFF';
+  const record = (productId: string, kind = 'Game', format = 'MSIXVC') => ({ ProductId: productId, ProductType: kind,
+    LocalizedProperties: [{ ProductTitle: productId }], DisplaySkuAvailabilities: [{ Sku: { Properties: { Packages: [{ PackageFormat: format, PlatformDependencies: [{ PlatformName: 'Windows.Desktop' }] }] } } }] });
+  const records = [record(A, 'Game', 'EAppxBundle'), record(B), record(C, 'Game', 'APPX'), record(D, 'Durable'),
+    { ProductId: E, ProductType: 'Game', LocalizedProperties: [{ ProductTitle: 'Incomplete edition' }], DisplaySkuAvailabilities: [{ Sku: { Properties: { BundledSkus: [{ BigId: F }] } } }] }, record('9UNLICENSED0')];
+  const service = new CatalogService((async () => new Response(JSON.stringify({ Products: records }))) as typeof fetch);
+  const library = new AccountLibrary((ids, market) => service.licensedProducts(ids, market), async () => output([
+    row(A), row(B), row(C, { satisfiedByProductId: 'CFQ7TTC0KGQ8' }), row(D), row(E),
+  ]));
+  library.select('one@example.test', '/not-executed', 'US');
+  const owned = (await library.get('owned')).products;
+  expect(owned.map(p => p.productId).sort()).toEqual([A, B, E]);
+  expect(owned.find(p => p.productId === A)).toMatchObject({ access: 'owned', installability: 'unsupported' });
+  expect(owned.find(p => p.productId === E)).toMatchObject({ access: 'owned', installability: 'unknown' });
+  expect((await library.get('gamepass')).products).toMatchObject([{ productId: C, access: 'gamepass', installability: 'unsupported' }]);
+  expect((await library.get('all')).products).toHaveLength(4);
+});
+
 it.each(['network', 'http', 'json', 'shape'])('does not cache a %s catalog failure as an empty successful library', async failure => {
   let healthy = false;
   const fetcher = vi.fn(async () => {

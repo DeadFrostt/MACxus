@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs';
+import { constants, promises as fs } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { commandWords } from '../shared/launch-tools.js';
@@ -7,9 +7,13 @@ interface Field { type: number; key: string; value: string | number | Field[]; s
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT';
 const empty = Buffer.from('\0shortcuts\0\x08\x08', 'binary');
 const png = (bytes?: Buffer) => bytes && bytes.length <= 4 * 1024 * 1024 && bytes.subarray(0, 8).toString('hex') === '89504e470d0a1a0a';
+// Large imported libraries can contain over 11,000 shortcuts. Keep independent
+// byte/field/depth limits so increasing capacity does not allow unbounded input.
+const MAX_SHORTCUT_BYTES = 32 * 1024 * 1024;
+const MAX_SHORTCUT_FIELDS = 500_000;
 
 function parse(bytes: Buffer): Field[] {
-  if (bytes.length > 8 * 1024 * 1024) throw Error('Steam shortcuts file is too large.');
+  if (bytes.length > MAX_SHORTCUT_BYTES) throw Error('Steam shortcuts file is too large.');
   let offset = 0, count = 0;
   const text = () => {
     const end = bytes.indexOf(0, offset);
@@ -24,7 +28,7 @@ function parse(bytes: Buffer): Field[] {
     while (offset < bytes.length) {
       const start = offset, type = bytes[offset++];
       if (type === 8) return fields;
-      if (++count > 100000) throw Error('Too many Steam shortcut fields.');
+      if (++count > MAX_SHORTCUT_FIELDS) throw Error('Too many Steam shortcut fields.');
       const key = text(); let value: Field['value'];
       if (type === 0) value = object(depth + 1);
       else if (type === 1) value = text();
@@ -89,7 +93,7 @@ export function planSteamShortcut(original: Buffer | undefined, launch: SteamLau
   }
   const appid = ((crc ^ 0xffffffff) | 0x80000000) >>> 0;
   if (entries.some(entry => field(entry.value as Field[], 'appid') === appid)) throw Error('Steam shortcut ID collision. No existing entry was changed.');
-  const index = Math.max(-1, ...entries.map(entry => Number(entry.key))) + 1;
+  const index = entries.reduce((highest, entry) => Math.max(highest, Number(entry.key)), -1) + 1;
   if (!Number.isSafeInteger(index)) throw Error('Invalid Steam shortcut index.');
   const block = Buffer.concat([Buffer.from('\0' + index + '\0'), integer('appid', appid), string('AppName', launch.title),
     string('Exe', launch.executable), string('StartDir', steamArgument(launch.directory)), string('icon', launch.icon),
@@ -118,9 +122,21 @@ async function safeDirectory(directory: string): Promise<void> {
 }
 export async function readSteamShortcuts(file: string): Promise<Buffer | undefined> {
   try {
-    const stat = await fs.lstat(file);
-    if (!stat.isFile() || stat.nlink !== 1 || stat.uid !== process.getuid?.() || (stat.mode & 0o022) || stat.size > 8 * 1024 * 1024) throw Error('Unsafe Steam shortcuts file.');
-    return await fs.readFile(file);
+    const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+    try {
+      const stat = await handle.stat();
+      if (!stat.isFile() || stat.nlink !== 1 || stat.uid !== process.getuid?.() || (stat.mode & 0o022) || stat.size > MAX_SHORTCUT_BYTES) throw Error('Unsafe Steam shortcuts file.');
+      const bytes = Buffer.alloc(stat.size);
+      let offset = 0;
+      while (offset < bytes.length) {
+        const { bytesRead } = await handle.read(bytes, offset, bytes.length - offset, offset);
+        if (!bytesRead) throw Error('Steam shortcuts changed concurrently.');
+        offset += bytesRead;
+      }
+      const after = await handle.stat();
+      if (after.size !== stat.size || after.mtimeMs !== stat.mtimeMs || after.ctimeMs !== stat.ctimeMs) throw Error('Steam shortcuts changed concurrently.');
+      return bytes;
+    } finally { await handle.close(); }
   } catch (error) { if (!missing(error)) throw error; }
 }
 export async function steamAccounts(home: string): Promise<string[]> {

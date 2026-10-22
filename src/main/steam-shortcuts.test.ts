@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { addSteamShortcut, planSteamShortcut, steamAccounts, steamArgument, type SteamLaunch } from './steam-shortcuts.js';
+import { addSteamShortcut, findSteamLaunch, planSteamShortcut, readSteamShortcuts, steamAccounts, steamArgument, type SteamLaunch } from './steam-shortcuts.js';
 
 let root: string;
 const image = Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), Buffer.from('fixture')]);
@@ -47,8 +47,13 @@ describe('Steam binary shortcut planning', () => {
     expect(() => planSteamShortcut(bytes, launch)).toThrow();
   });
   it('rejects oversized input and NUL injection', () => {
-    expect(() => planSteamShortcut(Buffer.alloc(8 * 1024 * 1024 + 1), launch)).toThrow('too large');
+    expect(() => planSteamShortcut(Buffer.alloc(32 * 1024 * 1024 + 1), launch)).toThrow('too large');
     expect(() => planSteamShortcut(undefined, { ...launch, title: 'bad\0field' })).toThrow();
+  });
+  it('keeps a field budget even for compact input', () => {
+    const fields = Buffer.from('\x01x\0\0'.repeat(500_001), 'binary');
+    const bytes = Buffer.concat([Buffer.from('\0shortcuts\0\x000\0', 'binary'), fields, Buffer.from([8, 8, 8])]);
+    expect(() => planSteamShortcut(bytes, launch)).toThrow('Too many');
   });
   it('quotes Steam command arguments without a shell expansion path', () => {
     expect(steamArgument('/home/my "$x`file`\\')).toBe('"/home/my \\"\\$x\\`file\\`\\\\"');
@@ -58,6 +63,33 @@ describe('Steam binary shortcut planning', () => {
 });
 
 describe('Steam filesystem integration', () => {
+  it('adds to 12,000 imported entries over 8 MiB, preserving every unknown field and byte', async () => {
+    const template = planSteamShortcut(undefined, { ...launch, title: 'Imported game', options: 'imported', identity: 'imported' }).bytes;
+    const entry = template.subarray('\0shortcuts\0'.length, -2);
+    const unknown = Buffer.concat([Buffer.from('\x01custom-provider\0', 'binary'), Buffer.from('x'.repeat(600) + '\0')]);
+    const blocks = Array.from({ length: 12_000 }, (_, i) => Buffer.concat([
+      Buffer.from('\0' + i + '\0'), entry.subarray(3, -1), unknown, Buffer.from([8]),
+    ]));
+    const original = Buffer.concat([template.subarray(0, '\0shortcuts\0'.length), ...blocks, Buffer.from([8, 8])]);
+    expect(original.length).toBeGreaterThan(8 * 1024 * 1024);
+    const directory = await setup(original);
+    await addSteamShortcut(directory, launch, {}, stopped);
+    const updated = (await readSteamShortcuts(path.join(directory, 'shortcuts.vdf')))!;
+    expect(updated.subarray(0, original.length - 2).equals(original.subarray(0, -2))).toBe(true);
+    const planned = planSteamShortcut(updated, launch);
+    expect(planned.added).toBe(false);
+    expect(findSteamLaunch(updated, launch)).toBe(planned.appid);
+    const backup = (await fs.readdir(directory)).find(name => name.startsWith('shortcuts.vdf.nexus-backup-'))!;
+    expect((await fs.readFile(path.join(directory, backup))).equals(original)).toBe(true);
+  });
+
+  it('refuses oversized files before reading or changing them', async () => {
+    const directory = await setup(), file = path.join(directory, 'shortcuts.vdf');
+    const handle = await fs.open(file, 'wx', 0o600);
+    await handle.truncate(32 * 1024 * 1024 + 1); await handle.close();
+    await expect(readSteamShortcuts(file)).rejects.toThrow('Unsafe');
+    expect((await fs.stat(file)).size).toBe(32 * 1024 * 1024 + 1);
+  });
   it('discovers existing native and Flatpak profiles, deduplicating Steam symlinks', async () => {
     await setup();
     await fs.mkdir(path.join(root, '.steam'), { mode: 0o700 });

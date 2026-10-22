@@ -4,6 +4,12 @@ import { demoSnapshot } from '../shared/demo-data';
 import { SettingsPage } from './App';
 
 describe('Settings diagnostics', () => {
+  it('explains that explicit sign-out also removes the local device registration', () => {
+    const html = renderToStaticMarkup(<SettingsPage data={demoSnapshot()} toast={() => {}} />);
+    expect(html).toContain('title="Remove saved sign-in credentials and local device registration. Games and saves are kept."');
+    expect(html).toContain('Sign out');
+    expect(html).toContain('Sign in again');
+  });
   it('does not call an unpublished development build the latest published release', () => {
     const html = renderToStaticMarkup(<SettingsPage data={demoSnapshot()} toast={() => {}} />);
     expect(html).toContain(`<h2>${demoSnapshot().launcherUpdate?.currentVersion}</h2>`);

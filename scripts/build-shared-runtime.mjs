@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { buildCompatibility } from './runtime-compat/build.mjs';
 import { buildPlayFabSessionProbe } from './runtime-tests/build-playfab-session.mjs';
 import { buildStoreProbes } from './runtime-tests/build-store-probes.mjs';
+import { buildSaveSyncProbe } from './runtime-tests/build-gamesave-sync-probe.mjs';
+import { buildUserAudioProbe } from './runtime-tests/build-user-audio-probe.mjs';
 import { buildUserPrivilegeProbe } from './runtime-tests/build-user-privilege-probe.mjs';
 import { buildRuntimeDxvk } from './build-runtime-dxvk.mjs';
 
@@ -197,7 +199,7 @@ await fs.writeFile(path.join(initTests, 'MicrosoftGame.config'), '<Game><!-- <Id
 for (const test of ['taskqueue-teardown', 'taskqueue-contract', 'taskqueue-close', 'async-provider-contract', 'async-completion-lifetime', 'async-schedule', 'gamesave-files']) {
   run('x86_64-w64-mingw32-gcc', ['-D__WINESRC__', '-O2', '-Wall', '-I', path.join(build, 'dlls/xgameruntime'), '-I', path.join(source, 'dlls/xgameruntime'), '-I', path.join(build, 'include'), '-I', path.join(source, 'include'), path.join(project, `scripts/runtime-tests/${test}-probe.c`), '-o', path.join(tests, `${test}-probe.exe`)], work);
 }
-for (const name of ['package-identity', 'package-legacy', 'package-chunks', 'package-monitors', 'system-device-id', 'user-device-association']) {
+for (const name of ['package-identity', 'package-legacy', 'package-chunks', 'package-monitors', 'package-progress-bytes', 'system-device-id', 'user-device-association']) {
   run('x86_64-w64-mingw32-gcc', ['-D__WINESRC__', '-O2', '-Wall', '-Wextra', '-Werror',
     '-I', path.join(build, 'dlls/xgameruntime'), '-I', path.join(source, 'dlls/xgameruntime'),
     '-I', path.join(build, 'include'), '-I', path.join(source, 'include'),
@@ -209,6 +211,8 @@ await buildUserPrivilegeProbe({ source, build, tests, project }, run);
 // Compile the exact entitlement helpers with a test-only failing license bridge.
 // Its synthetic signing key never changes production trust or reaches packaging.
 buildStoreProbes({ build, source, tests, project }, run);
+buildSaveSyncProbe({ build, source, tests, project }, run);
+buildUserAudioProbe({ build, source, tests, project }, run);
 // Ubuntu's older MinGW SDK need not contain windows.data.json.h at all.
 run('x86_64-w64-mingw32-gcc', ['-O2', '-Wall', '-I', path.join(build, 'include'), '-I', path.join(source, 'include'), path.join(project, 'scripts/runtime-tests/winrt-json-probe.c'), '-o', path.join(tests, 'winrt-json-probe.exe'), '-lruntimeobject'], work);
 await fs.copyFile(path.join(ngSource, 'COPYING'), path.join(components, 'nghttp2-LICENSE'));

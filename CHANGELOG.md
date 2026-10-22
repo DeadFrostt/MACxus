@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Preserve Microsoft broker headers on both hosted sign-in steps. Thanks @Wyze3306 for the upstream fix adapted here.
+- Accept compact JWE tickets when requesting game content licenses without changing Xbox or Store sign-in token handling.
+- Show owned games with unsupported packages in My Library with the existing Unsupported badge and installation disabled.
+- Fix missing library editions when several Store bundles are loaded together.
+- Implement communication audio endpoint queries and change notifications requested by games such as Deep Rock Galactic.
+- Fix missing new-save notifications at session close and incorrectly successful cloud-upload results.
+- Fully remove saved sign-in credentials and local device registration on Sign out; keep device registration when using Sign in again.
+- Preserve local save containers when cloud transfers fail or conflict with unuploaded changes, and reject incomplete cloud metadata.
+- Report real installed package byte totals and unknown-size states instead of zero-sized progress for nonempty games.
+- Export a reviewable diagnostic report with versions, system information and selected logs, with automatic redaction and local saving.
+- Support adding Steam shortcuts to large imported libraries without changing existing entries.
+- Prevent permissive directory permissions from blocking managed Proton prefixes at game startup.
+- Resolve game and add-on bundles using explicit contents instead of unrelated licensing offers, and report precise Store metadata errors.
+- Fix resolving game editions whose non-installable bonus items reference the parent bundle.
 - Fix Jurassic World Evolution 3 aborting during app-constrained notification registration at startup.
 - Fix repeated Xbox task-queue termination requests leaving games waiting during world cleanup or shutdown.
 

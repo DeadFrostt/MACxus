@@ -1,5 +1,11 @@
 import { expect, it } from 'vitest';
-import { defaultLibraryFilters, loadLibraryFilters, saveLibraryFilters } from './library-preferences';
+import { defaultLibraryFilters, loadLibraryFilters, saveLibraryFilters, libraryProductMatchesPlayState } from './library-preferences';
+
+it.each(['supported', 'unsupported', 'unknown'] as const)('Ready to install only includes supported packages (%s)', installability => {
+  expect(libraryProductMatchesPlayState({ installability }, 'all')).toBe(true);
+  expect(libraryProductMatchesPlayState({ installability }, 'installed')).toBe(false);
+  expect(libraryProductMatchesPlayState({ installability }, 'installable')).toBe(installability === 'supported');
+});
 
 it('restores access and play state but clears search after recreating the UI', () => {
   const values = new Map<string, string>();
