@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Implement communication audio endpoint queries and change notifications requested by games such as Deep Rock Galactic.
 - Fix missing new-save notifications at session close and incorrectly successful cloud-upload results.
 - Fully remove saved sign-in credentials and local device registration on Sign out; keep device registration when using Sign in again.
 - Preserve local save containers when cloud transfers fail or conflict with unuploaded changes, and reject incomplete cloud metadata.

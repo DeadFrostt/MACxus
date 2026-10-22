@@ -98,6 +98,11 @@ The runtime does not provide a unique platform device identifier.
   with two isolated device roots and a closed memory transport. Checks delayed
   completion, overlapping revisions, failed transfers, durable retries and
   session-release notifications without contacting cloud services.
+- `user-audio-probe.c`: communication audio endpoint getters and notification
+  lifetime using the actual helper, a closed MMDevice source and real task queues.
+  Covers Unicode, missing devices, failed initialization, queue cancellation,
+  concurrent registration and reentrant unregister, plus the real DLL ABI.
+  Does not change default devices or open recording/playback streams.
 - `playfab-session-probe.c`: pinned threading ABI checks, asynchronous test-only
   dialog choices, preserved title callbacks, retained synthetic users, caller
   Manual completion queue, genuine upload failure and acknowledged upload before
