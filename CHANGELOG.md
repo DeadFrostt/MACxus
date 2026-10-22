@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Support adding Steam shortcuts to large imported libraries without changing existing entries.
 - Prevent permissive directory permissions from blocking managed Proton prefixes at game startup.
 - Resolve game and add-on bundles using explicit contents instead of unrelated licensing offers, and report precise Store metadata errors.
 - Fix resolving game editions whose non-installable bonus items reference the parent bundle.
