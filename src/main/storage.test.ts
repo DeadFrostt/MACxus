@@ -160,13 +160,32 @@ describe('attachImage', () => {
   const run = async (info: string, mountTaken = false) => {
     const calls: string[][] = [];
     const exec = async (command: string, args: string[]) => { calls.push([command, ...args]); return { stdout: args[0] === 'info' ? info : '<key>mount-point</key><string>/Volumes/MACxus</string>' }; };
-    const result = await attachImage(IMG, { exec, exists: async () => mountTaken });
+    const result = await attachImage(IMG, { exec, exists: async () => true, isMount: async () => mountTaken });
     return { calls, result };
   };
   it('skips an image already attached (remount at startup)', async () => {
     const { calls, result } = await run(infoPlist([{ path: IMG, mounts: ['/Volumes/MACxus'] }]));
     expect(result).toBe('/Volumes/MACxus');
     expect(calls.map(c => c[1])).toEqual(['info']);
+  });
+  it('ignores a stale empty /Volumes/MACxus directory that is not a mount', async () => {
+    const { calls } = await run(infoPlist([]), false);
+    expect(calls.map(c => c[1])).toEqual(['info', 'attach']);
+  });
+  it('serializes concurrent calls so the image is attached once', async () => {
+    let attached = false; const calls: string[] = [];
+    const exec = async (_c: string, args: string[]) => {
+      calls.push(args[0]);
+      if (args[0] === 'info') { await new Promise(r => setTimeout(r, 5)); return { stdout: attached ? infoPlist([{ path: IMG, mounts: ['/Volumes/MACxus'] }]) : infoPlist([]) }; }
+      await new Promise(r => setTimeout(r, 5)); attached = true;
+      return { stdout: '<key>mount-point</key><string>/Volumes/MACxus</string>' };
+    };
+    const deps = { exec, exists: async () => false, isMount: async () => false };
+    expect(await Promise.all([attachImage(IMG, deps), attachImage(IMG, deps)])).toEqual(['/Volumes/MACxus', '/Volumes/MACxus']);
+    expect(calls.filter(c => c === 'attach')).toHaveLength(1);
+  });
+  it('asks to eject an extra attachment mounted away from /Volumes/MACxus', async () => {
+    await expect(run(infoPlist([{ path: IMG, mounts: ['/Volumes/MACxus 1'] }]))).rejects.toThrow('Espelli');
   });
   it('attaches when it is not attached yet', async () => {
     const { calls } = await run(infoPlist([]));
@@ -180,7 +199,8 @@ describe('createApfsImage', () => {
     const calls: string[][] = [];
     const recorded: string[] = [];
     return { calls, recorded, deps: {
-      exists: async (target: string) => target === '/Volumes/MACxus' ? mountTaken : existing,
+      exists: async (target: string) => target === '/Volumes/MACxus' ? true : existing,
+      isMount: async (target: string) => target === '/Volumes/MACxus' && mountTaken,
       record: async (image: string) => { recorded.push(image); },
       exec: async (command: string, args: string[]) => {
         calls.push([command, ...args]);

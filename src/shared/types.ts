@@ -241,6 +241,8 @@ export interface AppSnapshot {
   downloadProgressSupported?: boolean;
   /** macOS: ids of games whose disk is not connected. */
   disconnectedGames?: string[];
+  /** macOS: why the APFS image could not be mounted at startup. */
+  storageError?: string;
 }
 
 export interface InstallRequest {

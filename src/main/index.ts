@@ -212,6 +212,7 @@ function snapshot(): AppSnapshot {
     gameUpdates: structuredClone(gameUpdates),
     downloadProgressSupported: Boolean(backend.current.capabilities.streamingProgressJson),
     gameOperation: gameOperation ? structuredClone(gameOperation) : undefined,
+    storageError,
     disconnectedGames: process.platform === 'darwin' && volumeCacheReady
       ? store.games.filter(game => installRootStatus(game.path, volumeCache) === 'disconnected').map(game => game.id) : undefined,
   };
@@ -238,10 +239,17 @@ function watchVolumes(): void {
   } catch { /* Volume changes are then picked up on the next refresh. */ }
 }
 /** Re-attaches the APFS images the user created, so games on external disks are ready at launch. */
+let storageError: string | undefined;
 async function remountApfsImages(): Promise<void> {
+  storageError = undefined;
   await Promise.all((store.settings.apfsImages ?? []).map(async image => {
-    try { await fs.access(image); await attachImage(image); } catch { /* Disk not connected; its games show "Disco non collegato". */ }
+    try { await fs.access(image); } catch { return; } // Disk not connected; its games show "Disco non collegato".
+    try { await attachImage(image); } catch (error) {
+      storageError = error instanceof Error ? error.message : String(error);
+      console.error('APFS image remount failed:', error);
+    }
   }));
+  if (storageError) emitSnapshot();
 }
 async function assertStorageForInstall(destination: string, downloadBytes?: number): Promise<void> {
   if (process.platform !== 'darwin') return;

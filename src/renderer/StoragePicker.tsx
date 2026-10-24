@@ -6,7 +6,7 @@ const gb = (bytes: number) => `${(bytes / 1e9).toFixed(bytes >= 100e9 ? 0 : 1)} 
 const message = (error: unknown) => error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(error);
 const within = (root: string, mount: string) => mount === '/' || root === mount || root.startsWith(mount + '/');
 
-export function StoragePicker({ installRoot, onChosen }: { installRoot: string; onChosen?: (root: string) => void }) {
+export function StoragePicker({ installRoot, onChosen, storageError }: { installRoot: string; onChosen?: (root: string) => void; storageError?: string }) {
   const [volumes, setVolumes] = useState<VolumeInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string>();
@@ -47,6 +47,7 @@ export function StoragePicker({ installRoot, onChosen }: { installRoot: string; 
   return <div className="storage-picker">
     <div className="settings-heading"><div className="settings-icon"><HardDrive /></div><div><h2>Dove salvare i giochi</h2><p>Cartella attuale: {installRoot}</p></div>
       <button className="secondary" onClick={() => void load()} disabled={loading} title="Aggiorna l'elenco dei dischi">{loading ? <LoaderCircle className="spin" /> : <RefreshCw />}</button></div>
+    {storageError && !error ? <div className="alert amber" role="alert"><CircleAlert /><span>{storageError}</span></div> : null}
     {error ? <div className="alert amber" role="alert"><CircleAlert /><span>{error}</span></div> : null}
     <ul className="storage-volumes">
       {volumes.map(volume => <li key={volume.mountPoint} className={`storage-volume${current === volume ? ' selected' : ''}`}>

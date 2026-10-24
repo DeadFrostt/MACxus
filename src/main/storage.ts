@@ -86,28 +86,28 @@ export interface ImageDeps {
   exists: (target: string) => Promise<boolean>;
   /** Called with the image path as soon as it exists, before attaching, so a failed attach never orphans it. */
   record: (image: string) => Promise<void>;
+  /** True only when the path is a real mount point (its device differs from /Volumes'), not a leftover empty folder. */
+  isMount: (target: string) => Promise<boolean>;
 }
 const defaultDeps: ImageDeps = {
   exec: (command, args, options) => execFileAsync(command, args, { maxBuffer: 2_000_000, ...options }),
   exists: async target => { try { await fs.access(target); return true; } catch { return false; } },
   record: async () => {},
+  isMount: async target => {
+    try { return (await fs.stat(target)).dev !== (await fs.stat(path.dirname(target))).dev; } catch { return false; }
+  },
 };
 
 /** Creates MACxus.sparsebundle on the volume, or reuses (re-attaches) the one already there. */
 export async function createApfsImage(volumeMount: string, sizeGb: number, deps: Partial<ImageDeps> = {}): Promise<string> {
-  const { exec, exists, record } = { ...defaultDeps, ...deps };
+  const { exec, exists, record, isMount } = { ...defaultDeps, ...deps };
   const image = path.join(volumeMount, APFS_IMAGE_NAME);
   if (!await exists(image)) {
     if (!Number.isInteger(sizeGb) || sizeGb < 1 || sizeGb > 16_384) throw new Error('Dimensione immagine non valida.');
     await exec('hdiutil', ['create', '-size', `${sizeGb}g`, '-type', 'SPARSEBUNDLE', '-fs', 'APFS', '-volname', 'MACxus', image]);
   }
   await record(image);
-  return attachImage(image, { exec, exists });
-}
-
-export async function createImageAt(image: string, sizeGb: number, volname: string): Promise<string> {
-  await defaultDeps.exec('hdiutil', ['create', '-size', `${sizeGb}g`, '-type', 'SPARSEBUNDLE', '-fs', 'APFS', '-volname', volname, image]);
-  return attachImage(image);
+  return attachImage(image, { exec, isMount });
 }
 
 /** Where the launcher always mounts its APFS image, so the name never drifts to "MACxus 1". */
@@ -125,16 +125,24 @@ export function attachedImages(hdiutilInfoPlist: string): Array<{ imagePath: str
 }
 
 /** Attaches an image without showing it in Finder and returns its mount point. Never attaches an image twice. */
-export async function attachImage(image: string, deps: Pick<ImageDeps, 'exec' | 'exists'> = defaultDeps): Promise<string> {
-  const { exec, exists } = deps;
+let attachLock: Promise<unknown> = Promise.resolve();
+export function attachImage(image: string, deps: Pick<ImageDeps, 'exec' | 'isMount'> & Partial<ImageDeps> = defaultDeps): Promise<string> {
+  const run = attachLock.then(() => attachImageUnlocked(image, deps), () => attachImageUnlocked(image, deps));
+  attachLock = run.catch(() => {});
+  return run;
+}
+
+async function attachImageUnlocked(image: string, deps: Pick<ImageDeps, 'exec' | 'isMount'>): Promise<string> {
+  const { exec, isMount } = deps;
   const { stdout: info } = await exec('hdiutil', ['info', '-plist']);
   const attached = attachedImages(info);
   const existing = attached.find(entry => entry.imagePath === image);
   if (existing) {
-    if (existing.mountPoints.length) return existing.mountPoints[0];
+    if (existing.mountPoints.includes(APFS_MOUNT_POINT)) return APFS_MOUNT_POINT;
+    if (existing.mountPoints.length) throw new Error(`L'immagine è già collegata come ${existing.mountPoints[0]} invece di ${APFS_MOUNT_POINT}. Espelli quel disco (anche da Utility Disco) e riprova.`);
     throw new Error('L\'immagine è già collegata ma non montata. Espelli il disco da Utility Disco e riprova.');
   }
-  if (attached.some(entry => entry.mountPoints.includes(APFS_MOUNT_POINT)) || await exists(APFS_MOUNT_POINT)) {
+  if (attached.some(entry => entry.mountPoints.includes(APFS_MOUNT_POINT)) || await isMount(APFS_MOUNT_POINT)) {
     throw new Error(`Il percorso ${APFS_MOUNT_POINT} è già usato da un altro disco. Espelli quel disco e riprova.`);
   }
   const { stdout } = await exec('hdiutil', ['attach', '-nobrowse', '-mountpoint', APFS_MOUNT_POINT, '-plist', image], { timeout: 30_000 });
