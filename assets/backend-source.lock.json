@@ -48,6 +48,7 @@
     { "file": "xodus-keyring-create.patch", "sha256": "c79a46f387f7de54e3d3004d646f9e9b141c4d498eebd69a47144450b15442e6" },
     { "file": "xodus-bundle-membership.patch", "sha256": "a5eacc683d006b40247fbf124a62078080685b814cb09a33756083ab99adb72d" },
     { "file": "xodus-licensing-jwe.patch", "sha256": "6f0087e657f225e9a770405fbb34c2317f840615742c89b62f241f1b65c590ca" },
-    { "file": "xodus-hosted-signin.patch", "sha256": "f52b16944ca7dfc837337e0257be380467f01872706252d7c2e981db0c57a8bc" }
+    { "file": "xodus-hosted-signin.patch", "sha256": "f52b16944ca7dfc837337e0257be380467f01872706252d7c2e981db0c57a8bc" },
+    { "file": "xodus-macos-launch.patch", "sha256": "b18177a86cb809508217fc0674f244183515ef30a9b09147a1ef0b8e5206e3bb" }
   ]
 }

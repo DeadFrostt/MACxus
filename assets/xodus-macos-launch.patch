@@ -1,0 +1,444 @@
+diff --git a/crates/xodus-cli/src/commands/run.rs b/crates/xodus-cli/src/commands/run.rs
+index bb0b9e7..9b761d9 100644
+--- a/crates/xodus-cli/src/commands/run.rs
++++ b/crates/xodus-cli/src/commands/run.rs
+@@ -36,6 +36,7 @@ async fn playfab_auth_header(client: &reqwest::Client, tokens: &TokenManager) ->
+     xodus::api::xbox::get_xsts_auth_header(xsts).ok()
+ }
+ 
++#[cfg_attr(target_os = "macos", allow(dead_code))]
+ const LAUNCH_STUB_SUFFIX: &str = ".xodus-launch.exe";
+ 
+ fn launch_image_error(name: &str, operation: &str, error: std::io::Error) -> std::io::Error {
+@@ -96,6 +97,7 @@ fn wine_exit_code(status: std::process::ExitStatus) -> u8 {
+ 
+ // Real files in a full launch view must not be redirected back into memfds.
+ // Keep source mappings and encrypted DLL mappings; no title/EAC special case.
++#[cfg_attr(target_os = "macos", allow(dead_code))]
+ fn launch_file_maps(
+     fds: &[(&String, RawFd)],
+     source: &Path,
+@@ -220,6 +222,7 @@ fn populate_launch_view(
+     Ok(())
+ }
+ 
++#[cfg_attr(target_os = "macos", allow(dead_code))]
+ fn create_launch_chain_mirror(
+     source_root: &Path,
+     entry_suffix: &str,
+@@ -271,6 +274,7 @@ fn create_launch_chain_mirror(
+     Ok((mirror, entry, executable_count, bytes))
+ }
+ 
++#[cfg_attr(target_os = "macos", allow(dead_code))]
+ fn create_launch_mirror(
+     source_root: &Path,
+     entry_suffix: &str,
+@@ -365,6 +369,109 @@ fn write_launch_stub(stub_path: &Path, fd: RawFd, materialize: bool) -> std::io:
+     Ok(image_len)
+ }
+ 
++// CrossOver's Wine has no WINE_DLL_FILE_MAP/WINE_EXE_FILE_MAP, so on macOS every
++// encrypted image (exe and dll) must exist as a real decrypted file.
++#[cfg(target_os = "macos")]
++fn macos_decrypted_files(encrypted: &[(&String, RawFd)]) -> std::io::Result<HashMap<PathBuf, RawFd>> {
++    encrypted.iter().map(|(name, fd)| Ok((checked_relative_path(name)?, *fd))).collect()
++}
++
++#[cfg(target_os = "macos")]
++fn collect_directories(root: &Path, relative: &Path, found: &mut HashSet<PathBuf>) -> std::io::Result<()> {
++    for item in std::fs::read_dir(root.join(relative))? {
++        let item = item?;
++        if item.file_type()?.is_dir() {
++            let child = relative.join(item.file_name());
++            collect_directories(root, &child, found)?;
++            found.insert(child);
++        }
++    }
++    Ok(())
++}
++
++// Rebuilds the package tree in `view_root` with real directories, decrypted
++// encrypted images and symlinks for everything else, so files the game creates
++// stay in the view (and are copied back by `sync_back`).
++#[cfg(target_os = "macos")]
++fn create_macos_launch_view(
++    source_root: &Path,
++    view_root: &Path,
++    encrypted: &[(&String, RawFd)],
++) -> std::io::Result<()> {
++    let decrypted = macos_decrypted_files(encrypted)?;
++    let mut real_directories = HashSet::new();
++    collect_directories(source_root, Path::new(""), &mut real_directories)?;
++    let decrypted_files: HashSet<PathBuf> = decrypted.keys().cloned().collect();
++    populate_launch_view(source_root, view_root, Path::new(""), &real_directories, &decrypted_files)?;
++    for (relative, fd) in &decrypted {
++        write_launch_stub(&view_root.join(relative), *fd, true)?;
++    }
++    Ok(())
++}
++
++#[cfg(target_os = "macos")]
++fn sync_back_directory(
++    view_root: &Path,
++    source_root: &Path,
++    relative: &Path,
++    decrypted: &HashSet<PathBuf>,
++    copied: &mut usize,
++) -> std::io::Result<()> {
++    for item in std::fs::read_dir(view_root.join(relative))? {
++        let item = item?;
++        // .fseventsd, .Trashes, .HFS+ Private Directory Data belong to the volume.
++        if relative.as_os_str().is_empty() && item.file_name().to_string_lossy().starts_with('.') {
++            continue;
++        }
++        let child = relative.join(item.file_name());
++        let file_type = item.file_type()?;
++        if file_type.is_symlink() || decrypted.contains(&child) {
++            continue;
++        }
++        if file_type.is_dir() {
++            sync_back_directory(view_root, source_root, &child, decrypted, copied)?;
++        } else if file_type.is_file() {
++            let target = source_root.join(&child);
++            let result = target.parent().map_or(Ok(()), std::fs::create_dir_all)
++                .and_then(|_| std::fs::copy(item.path(), &target));
++            match result {
++                Ok(_) => *copied += 1,
++                Err(error) => eprintln!("could not keep {} written by the game: {error}", child.display()),
++            }
++        }
++    }
++    Ok(())
++}
++
++// Copies regular files the game created or replaced in the launch view back
++// into the package directory before the RAM disk is detached.
++#[cfg(target_os = "macos")]
++fn sync_back(view_root: &Path, source_root: &Path, decrypted: &HashSet<PathBuf>) -> std::io::Result<usize> {
++    let mut copied = 0;
++    sync_back_directory(view_root, source_root, Path::new(""), decrypted, &mut copied)?;
++    Ok(copied)
++}
++
++#[cfg(target_os = "macos")]
++fn keep_game_files(view_root: &Path, source_root: &Path, decrypted: &HashSet<PathBuf>) {
++    match sync_back(view_root, source_root, decrypted) {
++        Ok(0) => {}
++        Ok(count) => eprintln!("kept {count} files written by the game in its folder"),
++        Err(err) => eprintln!("could not keep files written by the game: {err}"),
++    }
++}
++
++// Room on the RAM disk for the view's directories, symlinks and game writes.
++#[cfg(target_os = "macos")]
++fn macos_view_reserve(source_root: &Path) -> u64 {
++    fn entries(directory: &Path) -> u64 {
++        std::fs::read_dir(directory).map(|items| items.flatten().map(|item| {
++            1 + if item.file_type().is_ok_and(|kind| kind.is_dir()) { entries(&item.path()) } else { 0 }
++        }).sum()).unwrap_or(0)
++    }
++    128 * 1024 * 1024 + entries(source_root) * 8 * 1024
++}
++
+ #[cfg(target_os = "linux")]
+ fn make_temp_file(_folder: &str) -> std::io::Result<std::fs::File> {
+     let fd = memfd_create("xodus", MemfdFlags::CLOEXEC).map_err(std::io::Error::from)?;
+@@ -381,13 +488,15 @@ fn make_temp_file(folder: &str) -> std::io::Result<std::fs::File> {
+ }
+ 
+ #[cfg(target_os = "macos")]
+-async fn prepare(lfiles: &HashMap<String, SegmentFile>) -> (impl AsyncFnOnce(), String) {
++async fn prepare(lfiles: &HashMap<String, SegmentFile>, view_reserve: u64) -> (impl AsyncFnOnce(), String) {
++    // Each image is held twice: the unlinked decryption buffer and its copy
++    // in the launch view.
+     let disk_size: u64 = lfiles
+         .iter()
+         .filter(|f| f.1.keep_encrypted)
+-        .map(|f| f.1.length + 4 * PAGE_SIZE as u64)
+-        .reduce(|o, s| o + s)
+-        .unwrap();
++        .map(|f| 2 * (f.1.length + 4 * PAGE_SIZE as u64))
++        .sum::<u64>()
++        + view_reserve;
+ 
+     let device_s = String::from_utf8(
+         Command::new("/usr/bin/hdiutil")
+@@ -414,8 +523,9 @@ async fn prepare(lfiles: &HashMap<String, SegmentFile>) -> (impl AsyncFnOnce(),
+         .unwrap();
+     assert!(fmt.success());
+ 
+-    let mount_dir_obj = tempdir().unwrap();
+-    let mount_dir = mount_dir_obj.path().to_str().unwrap();
++    // Keep the mount point: dropping a TempDir would walk the mounted volume.
++    let mount_dir_obj = tempdir().unwrap().keep();
++    let mount_dir = mount_dir_obj.to_str().unwrap();
+ 
+     let mnt = Command::new("/sbin/mount")
+         .arg("-t")
+@@ -430,6 +540,7 @@ async fn prepare(lfiles: &HashMap<String, SegmentFile>) -> (impl AsyncFnOnce(),
+         .unwrap();
+     assert!(mnt.success());
+     let mount_dir_cl = mount_dir.to_string();
++    let mount_point = mount_dir_obj.clone();
+     let device_cl = device.to_string();
+     (
+         async move || {
+@@ -449,6 +560,7 @@ async fn prepare(lfiles: &HashMap<String, SegmentFile>) -> (impl AsyncFnOnce(),
+                 .await
+                 .unwrap();
+             assert!(mnt.success());
++            let _ = std::fs::remove_dir(&mount_point);
+         },
+         mount_dir.to_owned(),
+     )
+@@ -532,6 +644,9 @@ pub async fn run(
+ 
+     let mut opened_images = vec![];
+ 
++    #[cfg(target_os = "macos")]
++    let (cleanup, mount_dir) = prepare(&lfiles, macos_view_reserve(&out_absolute)).await;
++    #[cfg(not(target_os = "macos"))]
+     let (cleanup, mount_dir) = prepare(&lfiles).await;
+ 
+     for file in &lfiles {
+@@ -581,6 +696,32 @@ pub async fn run(
+     };
+     let entry_suffix = entry_name.trim_start_matches('\\');
+ 
++    // macOS: the launch view is the RAM disk itself; --materialize-exe and
++    // --materialize-chain are implied because Wine cannot take file maps.
++    #[cfg(target_os = "macos")]
++    let _ = (materialize_exe, materialize_chain, entry_fd);
++    #[cfg(target_os = "macos")]
++    let view_root = std::fs::canonicalize(&mount_dir).unwrap_or_else(|_| PathBuf::from(&mount_dir));
++    #[cfg(target_os = "macos")]
++    let (stub_path, decrypted) = match create_macos_launch_view(&out_absolute, &view_root, &fds)
++        .and_then(|_| Ok((view_root.join(checked_relative_path(entry_suffix)?), macos_decrypted_files(&fds)?)))
++    {
++        Ok((entry, decrypted)) => {
++            eprintln!(
++                "created a RAM disk launch view with {} decrypted images at {}",
++                decrypted.len(),
++                view_root.display()
++            );
++            (entry, decrypted.into_keys().collect::<HashSet<PathBuf>>())
++        }
++        Err(err) => {
++            eprintln!("failed to create the macOS launch view: {}", err);
++            cleanup().await;
++            return ExitCode::FAILURE;
++        }
++    };
++
++    #[cfg(not(target_os = "macos"))]
+     let (launch_mirror, stub_path, mirror_nt_prefix) = if materialize_chain {
+         match create_launch_chain_mirror(&out_absolute, entry_suffix, &fds) {
+             Ok((mirror, path, count, bytes)) => {
+@@ -620,11 +761,13 @@ pub async fn run(
+         )
+     };
+ 
++    #[cfg(not(target_os = "macos"))]
+     let (env_value, exe_env_value) = launch_file_maps(
+         &fds, &out_absolute, mirror_nt_prefix.as_deref(), entry_name, entry_fd,
+         &stub_path, materialize_chain,
+     );
+ 
++    #[cfg(not(target_os = "macos"))]
+     let image_len = if materialize_chain {
+         0
+     } else {
+@@ -641,6 +784,7 @@ pub async fn run(
+             }
+         }
+     };
++    #[cfg(not(target_os = "macos"))]
+     if materialize_exe && !materialize_chain {
+         eprintln!(
+             "created a temporary offline view with {} decrypted bytes at {}",
+@@ -649,11 +793,22 @@ pub async fn run(
+         );
+     }
+ 
++    #[cfg(not(target_os = "macos"))]
+     let mut command = Command::new(wine);
++    #[cfg(not(target_os = "macos"))]
+     command
+         .arg(&stub_path)
+         .env("WINE_DLL_FILE_MAP", env_value)
+         .env("WINE_EXE_FILE_MAP", exe_env_value);
++    // current_dir moves into the view, so resolve a relative wine path first.
++    #[cfg(target_os = "macos")]
++    let mut command = Command::new(std::fs::canonicalize(&wine).unwrap_or_else(|_| PathBuf::from(&wine)));
++    #[cfg(target_os = "macos")]
++    command.arg(format!("Z:{}", stub_path.to_string_lossy().replace('/', "\\")));
++    #[cfg(target_os = "macos")]
++    if let Some(directory) = stub_path.parent() {
++        command.current_dir(directory);
++    }
+     match playfab_auth_header(client, tokens).await {
+         Some(header) => {
+             command.env("XODUS_XSTS_PLAYFAB", header);
+@@ -665,8 +820,12 @@ pub async fn run(
+         Ok(child) => child,
+         Err(err) => {
+             eprintln!("failed to start Wine: {}", err);
++            #[cfg(not(target_os = "macos"))]
+             let _ = std::fs::remove_file(&stub_path);
++            #[cfg(not(target_os = "macos"))]
+             drop(launch_mirror);
++            #[cfg(target_os = "macos")]
++            keep_game_files(&view_root, &out_absolute, &decrypted);
+             cleanup().await;
+             return ExitCode::FAILURE;
+         }
+@@ -683,8 +842,12 @@ pub async fn run(
+ 
+     let status = wn.wait().await.unwrap();
+ 
++    #[cfg(not(target_os = "macos"))]
+     let _ = std::fs::remove_file(&stub_path);
++    #[cfg(not(target_os = "macos"))]
+     drop(launch_mirror);
++    #[cfg(target_os = "macos")]
++    keep_game_files(&view_root, &out_absolute, &decrypted);
+     cleanup().await;
+ 
+     ExitCode::from(wine_exit_code(status))
+@@ -907,4 +1070,107 @@ mod tests {
+         symlink(outside.path(), root.path().join("External")).unwrap();
+         assert!(resolve_package_file(root.path(), "external/EXTERNAL.exe").is_err());
+     }
++
++    #[cfg(target_os = "macos")]
++    struct MacosFixture {
++        _root: tempfile::TempDir,
++        source: PathBuf,
++        view: PathBuf,
++        _images: Vec<std::fs::File>,
++        names: Vec<String>,
++    }
++
++    // source: Game.exe (encrypted), GameAssembly.dll (encrypted), Data/a.bin (plain)
++    #[cfg(target_os = "macos")]
++    fn macos_fixture() -> MacosFixture {
++        let root = tempfile::tempdir().unwrap();
++        let source = root.path().join("game");
++        let view = root.path().join("view");
++        std::fs::create_dir_all(source.join("Data")).unwrap();
++        std::fs::create_dir(&view).unwrap();
++        std::fs::write(source.join("Game.exe"), b"encrypted exe").unwrap();
++        std::fs::write(source.join("GameAssembly.dll"), b"encrypted dll").unwrap();
++        std::fs::write(source.join("Data/a.bin"), b"plain data").unwrap();
++        let mut images = vec![];
++        for _ in 0..2 {
++            let mut image = tempfile::tempfile().unwrap();
++            image.write_all(&fake_pe()).unwrap();
++            images.push(image);
++        }
++        MacosFixture {
++            _root: root,
++            source,
++            view,
++            _images: images,
++            names: vec![String::from("Game.exe"), String::from("GameAssembly.dll")],
++        }
++    }
++
++    #[cfg(target_os = "macos")]
++    impl MacosFixture {
++        fn fds(&self) -> Vec<(&String, RawFd)> {
++            self.names.iter().zip(&self._images).map(|(name, image)| (name, image.as_raw_fd())).collect()
++        }
++    }
++
++    #[cfg(target_os = "macos")]
++    #[test]
++    fn macos_launch_view_materializes_exes_and_dlls() {
++        let fixture = macos_fixture();
++        let view = &fixture.view;
++        create_macos_launch_view(&fixture.source, view, &fixture.fds()).unwrap();
++        assert!(!view.join("Game.exe").symlink_metadata().unwrap().is_symlink());
++        assert!(!view.join("GameAssembly.dll").symlink_metadata().unwrap().is_symlink());
++        assert!(view.join("Data/a.bin").symlink_metadata().unwrap().is_symlink());
++        assert_eq!(std::fs::read(view.join("Game.exe")).unwrap(), fake_pe());
++        assert_eq!(std::fs::read(view.join("GameAssembly.dll")).unwrap(), fake_pe());
++        assert_eq!(std::fs::read(view.join("Data/a.bin")).unwrap(), b"plain data");
++        assert_eq!(std::fs::read(fixture.source.join("Game.exe")).unwrap(), b"encrypted exe");
++        assert_eq!(std::fs::read(fixture.source.join("GameAssembly.dll")).unwrap(), b"encrypted dll");
++    }
++
++    #[cfg(target_os = "macos")]
++    #[test]
++    fn macos_launch_view_rejects_images_outside_the_package() {
++        let fixture = macos_fixture();
++        let outside = String::from("..\\Game.exe");
++        let image = tempfile::tempfile().unwrap();
++        let fds = [(&outside, image.as_raw_fd())];
++        assert!(create_macos_launch_view(&fixture.source, &fixture.view, &fds).is_err());
++    }
++
++    #[cfg(target_os = "macos")]
++    #[test]
++    fn macos_sync_back_copies_only_new_regular_files() {
++        let fixture = macos_fixture();
++        let (view, source) = (&fixture.view, &fixture.source);
++        create_macos_launch_view(source, view, &fixture.fds()).unwrap();
++        let decrypted: HashSet<PathBuf> = ["Game.exe", "GameAssembly.dll"].iter().map(PathBuf::from).collect();
++        std::fs::create_dir_all(view.join("Saved/Config")).unwrap();
++        std::fs::write(view.join("Saved/Config/Engine.ini"), b"[Core]").unwrap();
++        // Volume bookkeeping at the RAM disk root is never copied back.
++        std::fs::create_dir(view.join(".fseventsd")).unwrap();
++        std::fs::write(view.join(".fseventsd/log"), b"x").unwrap();
++        assert_eq!(sync_back(view, source, &decrypted).unwrap(), 1);
++        assert!(source.join("Saved/Config/Engine.ini").is_file());
++        assert_eq!(std::fs::read(source.join("Saved/Config/Engine.ini")).unwrap(), b"[Core]");
++        assert_eq!(std::fs::read(source.join("Game.exe")).unwrap(), b"encrypted exe");
++        assert_eq!(std::fs::read(source.join("GameAssembly.dll")).unwrap(), b"encrypted dll");
++        assert_eq!(std::fs::read(source.join("Data/a.bin")).unwrap(), b"plain data");
++        assert!(!source.join(".fseventsd").exists());
++    }
++
++    #[cfg(target_os = "macos")]
++    #[test]
++    fn macos_sync_back_keeps_files_the_game_replaced() {
++        let fixture = macos_fixture();
++        let (view, source) = (&fixture.view, &fixture.source);
++        create_macos_launch_view(source, view, &fixture.fds()).unwrap();
++        let decrypted: HashSet<PathBuf> = ["Game.exe", "GameAssembly.dll"].iter().map(PathBuf::from).collect();
++        // An atomic save replaces the symlink with a regular file.
++        std::fs::remove_file(view.join("Data/a.bin")).unwrap();
++        std::fs::write(view.join("Data/a.bin"), b"saved by game").unwrap();
++        assert_eq!(sync_back(view, source, &decrypted).unwrap(), 1);
++        assert_eq!(std::fs::read(source.join("Data/a.bin")).unwrap(), b"saved by game");
++    }
+ }
+diff --git a/crates/xodus-service/src/utils.rs b/crates/xodus-service/src/utils.rs
+index 1cd44e8..bfb6af7 100644
+--- a/crates/xodus-service/src/utils.rs
++++ b/crates/xodus-service/src/utils.rs
+@@ -5,5 +5,22 @@ pub fn get_runtime_dir() -> String {
+ 
+ #[cfg(target_os = "macos")]
+ pub fn get_runtime_dir() -> String {
+-    return "/tmp/".to_string();
++    runtime_dir_or_tmp(std::env::var("XDG_RUNTIME_DIR").ok())
++}
++
++#[cfg(target_os = "macos")]
++fn runtime_dir_or_tmp(runtime_dir: Option<String>) -> String {
++    runtime_dir.filter(|dir| !dir.is_empty()).unwrap_or_else(|| "/tmp/".to_string())
++}
++
++#[cfg(all(test, target_os = "macos"))]
++mod tests {
++    use super::runtime_dir_or_tmp;
++
++    #[test]
++    fn macos_runtime_dir_honours_xdg_runtime_dir() {
++        assert_eq!(runtime_dir_or_tmp(Some("/tmp/macxus-1".into())), "/tmp/macxus-1");
++        assert_eq!(runtime_dir_or_tmp(Some(String::new())), "/tmp/");
++        assert_eq!(runtime_dir_or_tmp(None), "/tmp/");
++    }
+ }
