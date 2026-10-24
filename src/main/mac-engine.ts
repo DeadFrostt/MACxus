@@ -22,7 +22,7 @@ export interface MacRunnerDeps {
   findCrossOver: () => Promise<CrossOverInstall | undefined>;
   highballInstalled: (dataRoot: string) => string | undefined;
   prepareCrossOver: (cx: CrossOverInstall, bottlesRoot: string, runtimeDllDir: string) => Promise<ProtonRunner>;
-  prepareHighball: (engineRoot: string, appleGptk: string, bottlesRoot: string, runtimeDllDir: string, extraEnv: Record<string, string>) => Promise<ProtonRunner>;
+  prepareHighball: (engineRoot: string, appleGptk: string, crossOverLib64: string, bottlesRoot: string, runtimeDllDir: string, extraEnv: Record<string, string>, log: (line: string) => void) => Promise<ProtonRunner>;
   profiles: () => Promise<MacProfiles>;
 }
 
@@ -68,7 +68,7 @@ export async function prepareMacRunner(request: MacRunnerRequest, deps: MacRunne
     if (!highball) throw new Error(HIGHBALL_MISSING);
     const gptk = appleGptkRoot(crossOver);
     request.log(`Motore Wine: Highball (${highball}); D3DMetal da ${gptk}; ${profileText}.`);
-    return { runner: await deps.prepareHighball(highball, gptk, bottlesRoot, request.runtimeDllDir, profileEnv), engine, profileEnv };
+    return { runner: await deps.prepareHighball(highball, gptk, path.join(crossOver!.root, 'lib64'), bottlesRoot, request.runtimeDllDir, profileEnv, request.log), engine, profileEnv };
   }
   if (!crossOver) throw new Error(CROSSOVER_MISSING);
   request.log(`Motore Wine: CrossOver ${crossOver.version || ''}`.trimEnd() + `; ${profileText}.`);

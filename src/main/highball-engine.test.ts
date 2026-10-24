@@ -156,15 +156,15 @@ describe('installHighballEngine', () => {
 });
 
 describe('highballWrapperScript', () => {
-  const script = highballWrapperScript('/Data Root/engine root', '/Apps/Cross Over/apple_gptk', "/b/xbox-highball's", { D3DM_VENDOR_ID: '0x10de', D3DM_DEVICE_DESCRIPTION: 'NVIDIA GeForce RTX 4070' });
+  const script = highballWrapperScript('/Data Root/engine root', '/Apps/Cross Over/apple_gptk', '/Apps/Cross Over/lib64', "/b/xbox-highball's", { D3DM_VENDOR_ID: '0x10de', D3DM_DEVICE_DESCRIPTION: 'NVIDIA GeForce RTX 4070' });
 
   it('exports the prefix and the D3DMetal wiring with shell quoting', () => {
     expect(script.startsWith('#!/bin/sh\n')).toBe(true);
     expect(script).toContain(`export WINEPREFIX='/b/xbox-highball'"'"'s'`);
     expect(script).toContain("export WINEDLLPATH_PREPEND='/Apps/Cross Over/apple_gptk/wine'");
     expect(script).toContain("export CX_D3DMETALPATH='/Apps/Cross Over/apple_gptk/external'");
-    expect(script).toContain(`export DYLD_FALLBACK_LIBRARY_PATH='/Apps/Cross Over/apple_gptk/external'"\${DYLD_FALLBACK_LIBRARY_PATH:+:\$DYLD_FALLBACK_LIBRARY_PATH}"`);
-    expect(script).toContain(`export DYLD_FALLBACK_FRAMEWORK_PATH='/Apps/Cross Over/apple_gptk/external'"\${DYLD_FALLBACK_FRAMEWORK_PATH:+:\$DYLD_FALLBACK_FRAMEWORK_PATH}"`);
+    expect(script).toContain(`export DYLD_FALLBACK_LIBRARY_PATH='/Apps/Cross Over/apple_gptk/external:/Apps/Cross Over/lib64:'"\${DYLD_FALLBACK_LIBRARY_PATH:-/usr/local/lib:/usr/lib}"`);
+    expect(script).toContain(`export DYLD_FALLBACK_FRAMEWORK_PATH='/Apps/Cross Over/apple_gptk/external:'"\${DYLD_FALLBACK_FRAMEWORK_PATH:-/Library/Frameworks:/System/Library/Frameworks}"`);
   });
 
   it('defaults msync on and esync off unless already set, and adds profile env the same way', () => {
@@ -184,7 +184,7 @@ describe('highballWrapperScript', () => {
   });
 
   it('ignores env keys that are not valid shell names and values outside the safe set', () => {
-    const unsafe = highballWrapperScript('/e', '/g', '/p', { 'A;rm -rf /': 'x', SAFE_KEY: '$(touch /tmp/x)', QUOTE: 'a"b' });
+    const unsafe = highballWrapperScript('/e', '/g', '/l', '/p', { 'A;rm -rf /': 'x', SAFE_KEY: '$(touch /tmp/x)', QUOTE: 'a"b' });
     expect(unsafe).not.toContain('rm -rf');
     expect(unsafe).not.toContain('touch');
     expect(unsafe).not.toContain('QUOTE');
@@ -213,8 +213,8 @@ describe('prepareHighballRunner', () => {
     await mkdir(runtime);
     for (const name of MAC_RUNTIME_DLLS) await writeFile(path.join(runtime, name), dll());
 
-    const first = await prepareHighballRunner(engine, '/gptk', bottles, runtime, { D3DM_VENDOR_ID: '0x10de' });
-    const second = await prepareHighballRunner(engine, '/gptk', bottles, runtime, { D3DM_VENDOR_ID: '0x10de' });
+    const first = await prepareHighballRunner(engine, '/gptk', '/gptk-lib64', bottles, runtime, { D3DM_VENDOR_ID: '0x10de' });
+    const second = await prepareHighballRunner(engine, '/gptk', '/gptk-lib64', bottles, runtime, { D3DM_VENDOR_ID: '0x10de' });
 
     const prefix = path.join(bottles, 'xbox-highball');
     const calls = (await readFile(log, 'utf8')).split('\n').filter(Boolean);
@@ -238,8 +238,35 @@ describe('prepareHighballRunner', () => {
     const wrapper = await readFile(first.command, 'utf8');
     expect(wrapper).toContain("CX_D3DMETALPATH='/gptk/external'");
     expect(wrapper).toContain('D3DM_VENDOR_ID');
+    expect(wrapper).toContain("/gptk-lib64:");
     // The CrossOver bottle is never touched.
     await expect(stat(path.join(bottles, 'xbox'))).rejects.toThrow();
+  }, 30_000);
+
+  async function prepareWithLib64(lib64: string, logs: string[]): Promise<void> {
+    const base = await tmp();
+    const engine = await fakeEngine(base, path.join(base, 'log'));
+    const runtime = path.join(base, 'runtime');
+    await mkdir(runtime);
+    for (const name of MAC_RUNTIME_DLLS) await writeFile(path.join(runtime, name), dll());
+    await prepareHighballRunner(engine, '/gptk', lib64, path.join(base, 'bottles'), runtime, {}, (line) => logs.push(line));
+  }
+
+  it('warns in Italian but continues when CrossOver has no libgnutls.30.dylib', async () => {
+    const lib64 = path.join(await tmp(), 'lib64');
+    await mkdir(lib64);
+    const logs: string[] = [];
+    await prepareWithLib64(lib64, logs);
+    expect(logs).toEqual(['GnuTLS non trovato: le connessioni sicure (servizi online) potrebbero non funzionare con il motore Highball.']);
+  }, 30_000);
+
+  it('does not warn when libgnutls.30.dylib is present', async () => {
+    const lib64 = path.join(await tmp(), 'lib64');
+    await mkdir(lib64);
+    await writeFile(path.join(lib64, 'libgnutls.30.dylib'), 'x');
+    const logs: string[] = [];
+    await prepareWithLib64(lib64, logs);
+    expect(logs).toEqual([]);
   }, 30_000);
 
   it('reports a prefix that wineboot did not create', async () => {
@@ -250,6 +277,6 @@ describe('prepareHighballRunner', () => {
     const runtime = path.join(base, 'runtime');
     await mkdir(runtime);
     for (const name of MAC_RUNTIME_DLLS) await writeFile(path.join(runtime, name), dll());
-    await expect(prepareHighballRunner(engine, '/gptk', path.join(base, 'bottles'), runtime, {})).rejects.toThrow(/prefisso Highball/);
+    await expect(prepareHighballRunner(engine, '/gptk', '/gptk-lib64', path.join(base, 'bottles'), runtime, {})).rejects.toThrow(/prefisso Highball/);
   }, 30_000);
 });

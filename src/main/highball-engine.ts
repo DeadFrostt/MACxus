@@ -147,18 +147,22 @@ function safeEnvironment(extraEnv: Record<string, string>): [string, string][] {
  * (WINEDLLPATH_PREPEND, CX_D3DMETALPATH, DYLD fallback paths). msync defaults on;
  * WINEMSYNC/WINEESYNC and profile values only apply when not already set.
  */
-export function highballWrapperScript(engineRoot: string, appleGptkRoot: string, prefix: string, extraEnv: Record<string, string>): string {
+export function highballWrapperScript(engineRoot: string, appleGptkRoot: string, crossOverLib64: string, prefix: string, extraEnv: Record<string, string>): string {
   const wine = shellQuote(path.join(engineRoot, 'engine', 'bin', 'wine'));
   const wineserver = shellQuote(path.join(engineRoot, 'engine', 'bin', 'wineserver'));
-  const external = shellQuote(path.join(appleGptkRoot, 'external'));
+  const externalDir = path.join(appleGptkRoot, 'external');
+  const external = shellQuote(externalDir);
+  // GnuTLS (and friends) come from CrossOver's lib64; the dyld defaults are kept after ours.
+  const libraryPath = shellQuote(`${externalDir}:${crossOverLib64}:`);
+  const frameworkPath = shellQuote(`${externalDir}:`);
   const defaults = Object.fromEntries(safeEnvironment({ WINEMSYNC: '1', WINEESYNC: '0', ...extraEnv }));
   return [
     '#!/bin/sh',
     `export WINEPREFIX=${shellQuote(prefix)}`,
     `export WINEDLLPATH_PREPEND=${shellQuote(path.join(appleGptkRoot, 'wine'))}`,
     `export CX_D3DMETALPATH=${external}`,
-    `export DYLD_FALLBACK_LIBRARY_PATH=${external}"\${DYLD_FALLBACK_LIBRARY_PATH:+:\$DYLD_FALLBACK_LIBRARY_PATH}"`,
-    `export DYLD_FALLBACK_FRAMEWORK_PATH=${external}"\${DYLD_FALLBACK_FRAMEWORK_PATH:+:\$DYLD_FALLBACK_FRAMEWORK_PATH}"`,
+    `export DYLD_FALLBACK_LIBRARY_PATH=${libraryPath}"\${DYLD_FALLBACK_LIBRARY_PATH:-/usr/local/lib:/usr/lib}"`,
+    `export DYLD_FALLBACK_FRAMEWORK_PATH=${frameworkPath}"\${DYLD_FALLBACK_FRAMEWORK_PATH:-/Library/Frameworks:/System/Library/Frameworks}"`,
     // Values match SAFE_ENV_VALUE, so they cannot break out of the double quotes.
     ...Object.entries(defaults).map(([key, value]) => `export ${key}="\${${key}:-${value}}"`),
     'if [ "${1:-}" = "--nexus-stop-prefix" ]; then',
@@ -181,13 +185,18 @@ export function highballWrapperScript(engineRoot: string, appleGptkRoot: string,
 export async function prepareHighballRunner(
   engineRoot: string,
   appleGptkRoot: string,
+  crossOverLib64: string,
   bottlesRoot: string,
   runtimeDllDir: string,
   extraEnv: Record<string, string> = {},
+  log: (line: string) => void = () => undefined,
 ): Promise<ProtonRunner> {
   const wine = path.join(engineRoot, 'engine', 'bin', 'wine');
   const wineserver = path.join(engineRoot, 'engine', 'bin', 'wineserver');
   const prefix = path.join(bottlesRoot, PREFIX);
+  try { await fs.access(path.join(crossOverLib64, 'libgnutls.30.dylib')); } catch {
+    log('GnuTLS non trovato: le connessioni sicure (servizi online) potrebbero non funzionare con il motore Highball.');
+  }
   const env: NodeJS.ProcessEnv = { ...process.env, WINEPREFIX: prefix, WINEDEBUG: process.env.WINEDEBUG ?? '-all' };
   await fs.mkdir(bottlesRoot, { recursive: true });
 
@@ -207,6 +216,6 @@ export async function prepareHighballRunner(
   await ensureRuntimeOverrides(prefix, !existed || changed.length > 0, (name) => run(wine, dllOverrideArgs(name), { env }), 'Highball prefix');
 
   const runner = path.join(bottlesRoot, RUNNER);
-  await writeRunnerScript(runner, highballWrapperScript(engineRoot, appleGptkRoot, prefix, extraEnv));
+  await writeRunnerScript(runner, highballWrapperScript(engineRoot, appleGptkRoot, crossOverLib64, prefix, extraEnv));
   return { command: runner, compatibilityDataPath: prefix, stopPrefix: { command: runner, args: ['--nexus-stop-prefix'] } };
 }
