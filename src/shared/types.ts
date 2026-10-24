@@ -177,6 +177,15 @@ export interface Settings {
   runtimeRoot: string;
   verboseLogs: boolean;
   firstRunCompleted?: boolean;
+  /** macOS: true once the user has picked where games are stored. */
+  storageChosen?: boolean;
+  /** macOS: APFS sparse bundles remounted at startup. */
+  apfsImages?: string[];
+}
+
+export interface VolumeInfo {
+  mountPoint: string; name: string; fsType: string; internal: boolean;
+  freeBytes: number; totalBytes: number; supported: boolean; reason?: string;
 }
 
 export interface LauncherUpdate {
@@ -226,6 +235,8 @@ export interface AppSnapshot {
   gameOperation?: GameOperation;
   gameUpdates?: Record<string, GameUpdate>;
   downloadProgressSupported?: boolean;
+  /** macOS: ids of games whose disk is not connected. */
+  disconnectedGames?: string[];
 }
 
 export interface InstallRequest {
@@ -404,6 +415,9 @@ export interface LauncherApi {
   installGameVcRuntime(id: string): Promise<void>;
   cancelGame(): Promise<void>;
   updateSettings(patch: Partial<Settings>): Promise<Settings>;
+  listVolumes(): Promise<VolumeInfo[]>;
+  setInstallRoot(root: string): Promise<Settings>;
+  createApfsImage(volumeMount: string, sizeGb: number): Promise<string>;
   chooseDirectory(defaultPath?: string): Promise<string | null>;
   chooseFile(defaultPath?: string): Promise<string | null>;
   openPath(path: string): Promise<void>;

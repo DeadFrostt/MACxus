@@ -1,5 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, Notification, powerSaveBlocker, screen, shell } from 'electron';
-import { constants, createWriteStream, promises as fs, readFileSync, writeFileSync } from 'node:fs';
+import { constants, createWriteStream, promises as fs, readFileSync, watch, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +12,7 @@ import { DownloadBandwidthControls, isBandwidthOnlyPatch } from './download-band
 import { demoAccountLibrary, demoAccountProducts, demoDownloads, demoGames, demoLaunchOptions, demoLocales, demoSnapshot, type DemoArtwork } from '../shared/demo-data.js';
 import { backendLock } from './backend-package.js';
 import { BackendManager } from './backend.js';
+import { attachImage, createApfsImage, enoughSpace, installRootStatus, listVolumes, type VolumeInfo } from './storage.js';
 import { run, spawnTracked } from './process.js';
 import { inspectGameDirectory, StateStore } from './store.js';
 import { RuntimeManager } from './runtime.js';
@@ -208,7 +209,47 @@ function snapshot(): AppSnapshot {
     gameUpdates: structuredClone(gameUpdates),
     downloadProgressSupported: Boolean(backend.current.capabilities.streamingProgressJson),
     gameOperation: gameOperation ? structuredClone(gameOperation) : undefined,
+    disconnectedGames: process.platform === 'darwin' && volumeCacheReady
+      ? store.games.filter(game => installRootStatus(game.path, volumeCache) === 'disconnected').map(game => game.id) : undefined,
   };
+}
+
+let volumeCache: VolumeInfo[] = [];
+let volumeCacheReady = false;
+async function refreshVolumes(): Promise<VolumeInfo[]> {
+  const volumes = await listVolumes();
+  const changed = !volumeCacheReady || JSON.stringify(volumes.map(v => v.mountPoint)) !== JSON.stringify(volumeCache.map(v => v.mountPoint));
+  volumeCache = volumes;
+  volumeCacheReady = true;
+  if (changed) emitSnapshot();
+  return volumes;
+}
+let volumeWatchTimer: ReturnType<typeof setTimeout> | undefined;
+function watchVolumes(): void {
+  try {
+    const watcher = watch('/Volumes', () => {
+      if (volumeWatchTimer) clearTimeout(volumeWatchTimer);
+      volumeWatchTimer = setTimeout(() => { void refreshVolumes().catch(() => { /* Keep the last known list. */ }); }, 1_000);
+    });
+    watcher.unref();
+  } catch { /* Volume changes are then picked up on the next refresh. */ }
+}
+/** Re-attaches the APFS images the user created, so games on external disks are ready at launch. */
+async function remountApfsImages(): Promise<void> {
+  for (const image of store.settings.apfsImages ?? []) {
+    try { await fs.access(image); await attachImage(image); } catch { /* Disk not connected; its games show "Disco non collegato". */ }
+  }
+}
+async function assertStorageForInstall(destination: string, downloadBytes?: number): Promise<void> {
+  if (process.platform !== 'darwin') return;
+  const volumes = await refreshVolumes();
+  const status = installRootStatus(destination, volumes);
+  if (status === 'disconnected') throw Error('Disco non collegato. Collega il disco scelto per i giochi o scegli un altro percorso.');
+  if (status === 'unsupported') throw Error('Questo disco non supporta i collegamenti necessari ai giochi. Crea un\'immagine APFS su questo disco dalle Impostazioni.');
+  if (downloadBytes === undefined) return;
+  const volume = volumes.filter(entry => destination === entry.mountPoint || destination.startsWith(entry.mountPoint.replace(/\/$/, '') + '/'))
+    .sort((a, b) => b.mountPoint.length - a.mountPoint.length)[0];
+  if (volume && !enoughSpace(volume.freeBytes, downloadBytes)) throw Error('Spazio insufficiente sul disco scelto. Libera spazio o scegli un altro disco.');
 }
 
 async function saveReviewedReport(content: unknown): Promise<boolean> {
@@ -525,6 +566,7 @@ async function prepareInstall(request: InstallRequest, updateGame?: Game, conten
     ...store.games.filter(game => game.id !== updateGame?.id && game.id !== content?.game.id).map(game => game.path),
     app.getPath('userData'), store.settings.runtimeRoot,
   ]);
+  await assertStorageForInstall(destination, content?.pkg.downloadBytes);
   if (updateGame) {
     const actual = await fs.realpath(destination);
     if (actual !== await fs.realpath(updateGame.path)) throw new Error('Update destination differs from the installed game.');
@@ -819,6 +861,7 @@ async function launchGame(id: string): Promise<void> {
 
 async function prepareGameLaunch(id: string): Promise<void> {
   const game = store.games.find((entry) => entry.id === id);
+  if (game && process.platform === 'darwin' && installRootStatus(game.path, await refreshVolumes()) === 'disconnected') throw Error('Disco non collegato. Collega il disco su cui è installato il gioco.');
   if (!game) throw new Error('Game not found.');
   const target = await canonicalInstallPath(game.path);
   for (const task of store.downloads.filter(task => ['running', 'queued', 'paused'].includes(task.status))) {
@@ -1233,6 +1276,9 @@ function registerDemoIpc(catalogMarket: () => string): void {
   ipcMain.handle('install-game-vc-runtime', () => {});
   ipcMain.handle('cancel-game', () => {});
   ipcMain.handle('update-settings', (_event, patch: Partial<Settings>) => ({ ...snapshot().settings, ...patch }));
+  ipcMain.handle('list-volumes', () => []);
+  ipcMain.handle('set-install-root', () => { throw new Error('Unavailable in demo mode.'); });
+  ipcMain.handle('create-apfs-image', () => { throw new Error('Unavailable in demo mode.'); });
   ipcMain.handle('choose-directory', () => null);
   ipcMain.handle('choose-file', () => null);
   ipcMain.handle('open-path', () => {});
@@ -1595,6 +1641,30 @@ function registerIpc(): void {
     emitSnapshot();
     return settings;
   });
+  ipcMain.handle('list-volumes', () => process.platform === 'darwin' ? refreshVolumes() : []);
+  ipcMain.handle('set-install-root', async (_event, root: string) => {
+    if (process.platform !== 'darwin') throw Error('La scelta del disco è disponibile solo su macOS.');
+    if (typeof root !== 'string' || !path.isAbsolute(root)) throw Error('Percorso non valido.');
+    const resolved = path.resolve(root);
+    const status = installRootStatus(resolved, await refreshVolumes());
+    if (status === 'disconnected') throw Error('Disco non collegato.');
+    if (status === 'unsupported') throw Error('Questo disco non supporta i collegamenti necessari ai giochi. Crea un\'immagine APFS su questo disco.');
+    await fs.mkdir(resolved, { recursive: true });
+    const settings = await store.setSettings({ installRoot: resolved, storageChosen: true });
+    emitSnapshot();
+    return settings;
+  });
+  ipcMain.handle('create-apfs-image', async (_event, volumeMount: string, sizeGb: number) => {
+    if (process.platform !== 'darwin') throw Error('Le immagini APFS sono disponibili solo su macOS.');
+    const volumes = await refreshVolumes();
+    if (typeof volumeMount !== 'string' || !volumes.some(volume => volume.mountPoint === volumeMount)) throw Error('Disco non trovato.');
+    const mountPoint = await createApfsImage(volumeMount, sizeGb);
+    const image = path.join(volumeMount, 'MACxus.sparsebundle');
+    const images = store.settings.apfsImages ?? [];
+    if (!images.includes(image)) await store.setSettings({ apfsImages: [...images, image] });
+    await refreshVolumes();
+    return mountPoint;
+  });
   ipcMain.handle('choose-directory', async (_event, defaultPath?: string) => {
     const result = await dialog.showOpenDialog(mainWindow!, { properties: ['openDirectory', 'createDirectory'], defaultPath });
     return result.canceled ? null : result.filePaths[0];
@@ -1851,6 +1921,11 @@ app.whenReady().then(async () => {
   void enrichLibraryCovers().then(() => emitSnapshot(), () => { /* Covers are optional. */ });
   void enrichDownloadCovers(store.downloads, currentMarket()).catch(() => { /* Covers are optional. */ });
   if (process.platform !== 'darwin') void checkLauncherUpdate().then(() => emitSnapshot());
+  if (process.platform === 'darwin') {
+    await remountApfsImages();
+    await refreshVolumes().catch(() => { /* Volume status is optional. */ });
+    watchVolumes();
+  }
   registerIpc();
   launchReady = true;
   if (startupRequest.gameId) {

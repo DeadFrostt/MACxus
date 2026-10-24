@@ -635,3 +635,9 @@ button.primary, button.secondary { border-radius: 5px; min-height: 40px; font-si
 .keyring-compact .keyring-problem { margin: 10px 0 0; font-size: 12px; line-height: 1.5; }
 .keyring-help { margin-top: 8px; font-size: 11px; color: var(--muted); }
 .keyring-help > summary { cursor: pointer; width: fit-content; }
+
+.storage-volumes { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.storage-volume { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line, rgba(255,255,255,.12)); border-radius: 10px; }
+.storage-volume.selected { border-color: var(--accent, #107c10); }
+.storage-volume small { display: block; opacity: .75; }
+.storage-volume input[type="number"] { width: 72px; margin-left: 6px; }
