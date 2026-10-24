@@ -109,11 +109,16 @@ export async function prepareCrossOverRunner(
     changed.push(name);
   }
 
-  if (!existed || changed.length > 0) {
+  const markerPath = path.join(bottlePath, '.macxus-overrides');
+  const markerContent = [...MAC_RUNTIME_DLLS].sort().join('\n') + '\n';
+  let confirmed = false;
+  try { confirmed = (await fs.readFile(markerPath, 'utf8')) === markerContent; } catch { /* not confirmed yet */ }
+  if (!existed || changed.length > 0 || !confirmed) {
     for (const name of MAC_RUNTIME_DLLS) {
       const result = await run(cx.wine, ['--bottle', BOTTLE, 'reg', 'add', 'HKCU\\Software\\Wine\\DllOverrides', '/v', name.replace(/\.dll$/i, ''), '/t', 'REG_SZ', '/d', 'native,builtin', '/f'], { env });
       if (result.code !== 0) throw new Error(`Could not set the ${name} override in the CrossOver bottle (code ${result.code})`);
     }
+    await fs.writeFile(markerPath, markerContent);
   }
 
   const runner = path.join(bottlesRoot, 'xodus-crossover-wine');

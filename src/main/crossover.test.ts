@@ -99,4 +99,39 @@ describe('prepareCrossOverRunner', () => {
     await chmod(first.command, 0o700);
     expect(await readFile(first.command, 'utf8')).toContain('CX_BOTTLE_PATH');
   });
+
+  it('skips reg add when nothing changed and the marker is current', async () => {
+    const base = await tmp();
+    const log = path.join(base, 'log');
+    const cx = await fakeInstall(base, log);
+    const bottles = path.join(base, 'bottles');
+    const runtime = path.join(base, 'runtime');
+    await mkdir(runtime);
+    for (const name of MAC_RUNTIME_DLLS) await writeFile(path.join(runtime, name), dll(true));
+    await prepareCrossOverRunner(cx, bottles, runtime);
+    await writeFile(log, '');
+    await prepareCrossOverRunner(cx, bottles, runtime);
+    expect((await readFile(log, 'utf8')).split('\n').filter((line) => line.includes('reg add'))).toHaveLength(0);
+  });
+
+  it('retries all overrides after a failed attempt and then writes the marker', async () => {
+    const base = await tmp();
+    const log = path.join(base, 'log');
+    const cx = await fakeInstall(base, log);
+    const bottles = path.join(base, 'bottles');
+    const runtime = path.join(base, 'runtime');
+    await mkdir(runtime);
+    for (const name of MAC_RUNTIME_DLLS) await writeFile(path.join(runtime, name), dll(true));
+    const flag = path.join(base, 'fail');
+    await writeFile(flag, '');
+    await writeFile(cx.wine, `#!/bin/sh\necho "wine $*" >> '${log}'\nif [ -e '${flag}' ]; then exit 1; fi\n`, { mode: 0o755 });
+    await expect(prepareCrossOverRunner(cx, bottles, runtime)).rejects.toThrow();
+    const marker = path.join(bottles, 'xbox/.macxus-overrides');
+    await expect(readFile(marker, 'utf8')).rejects.toThrow();
+    await rm(flag);
+    await writeFile(log, '');
+    await prepareCrossOverRunner(cx, bottles, runtime);
+    expect((await readFile(log, 'utf8')).split('\n').filter((line) => line.includes('reg add'))).toHaveLength(MAC_RUNTIME_DLLS.length);
+    expect((await readFile(marker, 'utf8')).trim().split('\n')).toEqual([...MAC_RUNTIME_DLLS].sort());
+  });
 });
