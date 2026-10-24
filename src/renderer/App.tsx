@@ -25,6 +25,7 @@ import type { DownloadCancelOptions } from '../shared/types';
 export type { LibraryFilters } from './library-preferences';
 
 const emptySnapshot: AppSnapshot = {
+  platform: 'linux',
   backend: {
     available: false, source: 'none', updateAvailable: false, checking: false, updating: false,
     externalRoot: '',
@@ -95,7 +96,7 @@ function AccountAvatar({ auth, large = false }: { auth: AppSnapshot['auth']; lar
 export function TopStatus({ data, go }: { data: AppSnapshot; go: (page: Page) => void }) {
   const restart = data.launcherUpdate?.restartRequired;
   const updates = [
-    data.launcherUpdate?.latestVersion && !restart ? `Launcher ${data.launcherUpdate.latestVersion}` : '',
+    data.platform !== 'darwin' && data.launcherUpdate?.latestVersion && !restart ? `Launcher ${data.launcherUpdate.latestVersion}` : '',
     data.backend.releaseAvailable && data.backend.updateAvailable ? `Backend ${data.backend.releaseVersion ?? ''}`.trim() : '',
     nexusRuntimeUpdateAvailable(data.runtime) ? `Runtime ${data.runtime.nexusVersion?.replace(/^runtime-/, '') ?? ''}`.trim() : '',
   ].filter(Boolean);
@@ -348,10 +349,10 @@ interface GameMenuActionsProps {
   onBrowse: () => void; onSettings: () => void; onInstallVc: () => void; onRemove: () => void;
   onShortcut?: (destination: 'desktop' | 'applications' | 'steam') => void;
   onUpdate?: () => void; updateDisabled?: boolean; updateLabel?: string;
-  onContent?: () => void; contentDisabled?: boolean;
+  onContent?: () => void; contentDisabled?: boolean; hideSteam?: boolean;
 }
 
-export function GameMenuActions({ game, options, busy, onBrowse, onSettings, onInstallVc, onRemove, onShortcut, onUpdate, updateDisabled, updateLabel, onContent, contentDisabled }: GameMenuActionsProps) {
+export function GameMenuActions({ game, options, busy, onBrowse, onSettings, onInstallVc, onRemove, onShortcut, onUpdate, updateDisabled, updateLabel, onContent, contentDisabled, hideSteam }: GameMenuActionsProps) {
   return <>
     {onUpdate ? <button role="menuitem" disabled={busy || updateDisabled} onClick={onUpdate}><RefreshCw />{updateLabel ?? 'Check for updates'}</button> : null}
     <button role="menuitem" onClick={onBrowse}><FolderOpen />Browse game files</button>
@@ -359,7 +360,7 @@ export function GameMenuActions({ game, options, busy, onBrowse, onSettings, onI
     <button role="menuitem" onClick={onSettings}><Settings2 />Game settings</button>
     <button role="menuitem" disabled={!onShortcut || game.installState !== 'ready'} onClick={() => onShortcut?.('desktop')}><Plus />Create desktop shortcut</button>
     <button role="menuitem" disabled={!onShortcut || game.installState !== 'ready'} onClick={() => onShortcut?.('applications')}><Plus />Add to applications menu</button>
-    <button role="menuitem" disabled={!onShortcut || game.installState !== 'ready'} title="Add a shortcut with available artwork, including while Steam is running." onClick={() => onShortcut?.('steam')}><Plus />Add to Steam</button>
+    {hideSteam ? null : <button role="menuitem" disabled={!onShortcut || game.installState !== 'ready'} title="Add a shortcut with available artwork, including while Steam is running." onClick={() => onShortcut?.('steam')}><Plus />Add to Steam</button>}
     <button role="menuitem" disabled={busy || game.installState !== 'ready' || !options?.vcInstall} title={options?.vcReason} onClick={onInstallVc}><Download />Install / update VC++</button>
     <button role="menuitem" className="danger" disabled={busy} onClick={onRemove}><Trash2 />Remove game…</button>
   </>;
@@ -711,7 +712,7 @@ export function LibraryPage({ data, toast, filters, onFiltersChange, selection }
   const menuGame = data.games.find((game) => game.id === menu?.id);
   const modalGame = data.games.find((game) => game.id === dialogGame?.id);
   const managementProps = (game: Game): GameMenuActionsProps => ({
-    game, options: launchOptions, busy: gameBusy,
+    game, options: launchOptions, busy: gameBusy, hideSteam: data.platform === 'darwin',
     onBrowse: () => { setMenu(undefined); void window.launcher.openPath(game.path).catch(error => toast({ kind: 'error', message: errorMessage(error) })); },
     onSettings: () => openDialog(game, 'settings'),
     onInstallVc: () => { setMenu(undefined); void installVc(game); },
@@ -864,10 +865,11 @@ export function SettingsPage({ data, toast }: { data: AppSnapshot; toast: (value
 
   const caps = data.backend.capabilities;
   const runtimeInfo = runtimeDisplay(data.runtime);
+  const isMac = data.platform === 'darwin';
   return <main className="page settings-page">
     <header className="page-header"><div><h1>Settings</h1><p>Account, backend, runtime, and storage.</p></div></header>
 
-    <section className="settings-card compact launcher-card">
+    {isMac ? null : <section className="settings-card compact launcher-card">
       {data.launcherUpdate?.phase ? <p>{data.launcherUpdate.phase}</p> : null}
       {data.launcherUpdate?.updating ? <div className="progress-track"><i style={{ width: `${data.launcherUpdate.progress ?? 0}%` }} /></div> : null}
       {data.launcherUpdate?.error ? <div className="alert amber"><CircleAlert /><span>{data.launcherUpdate.error}</span></div> : null}
@@ -880,7 +882,7 @@ export function SettingsPage({ data, toast }: { data: AppSnapshot; toast: (value
         <button className="secondary" disabled={data.launcherUpdate?.checking || data.launcherUpdate?.updating || data.launcherUpdate?.restartRequired} onClick={() => invoke('update-check', () => window.launcher.checkLauncherUpdate(), 'Update check finished.')}>{data.launcherUpdate?.checking ? <LoaderCircle className="spin" /> : <RefreshCw />}Check for updates</button>
         <button className="secondary" disabled={Boolean(busy)} title="Add Nexus with artwork, including while Steam is running." onClick={() => invoke('steam-launcher', () => window.launcher.addToSteam(), 'Nexus added to Steam.')}><Plus />Add Nexus to Steam</button>
       </div>
-    </section>
+    </section>}
 
     <section className="settings-card account-card">
       <div className="settings-heading"><AccountAvatar auth={data.auth} large /><div><span className="overline">MICROSOFT ACCOUNT</span><h2>{data.auth.gamertag ?? data.auth.username ?? (data.auth.stored === false ? 'Not signed in' : 'Account status unavailable')}</h2><p>{data.auth.stored === true ? 'Credentials stored by Xodus' : 'Authentication uses the original Xodus webview'}</p></div><span className={`status-label ${data.auth.stored === true ? 'ready' : data.auth.stored === false ? 'off' : 'unknown'}`}><StatusDot tone={data.auth.stored === true ? 'green' : data.auth.stored === false ? 'red' : 'amber'} />{data.auth.stored === true ? 'STORED' : data.auth.stored === false ? 'SIGNED OUT' : 'UNKNOWN'}</span></div>

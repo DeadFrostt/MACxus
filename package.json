@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:runtime-tools": "node --test scripts/eac-trace-summary.test.mjs scripts/wine-exception-metadata.test.mjs scripts/assemble-shared-runtime.test.mjs scripts/build-runtime-dxvk.test.mjs scripts/verify-runtime-base.test.mjs scripts/runtime-compat/staging.test.mjs scripts/runtime-tests/build-store-probes.test.mjs scripts/runtime-tests/build-user-privilege-probe.test.mjs scripts/runtime-tests/build-gamesave-sync-probe.test.mjs scripts/runtime-tests/build-user-audio-probe.test.mjs",
     "test:ci-tools": "node --test scripts/ci/*.test.mjs",
+    "dist:mac": "npm run build && electron-builder --mac dmg --arm64 --publish never",
     "build": "npm run clean && npm run typecheck && npm run test && vite build && tsc -p tsconfig.electron.json",
     "dist": "npm run build && electron-builder --linux AppImage --publish never",
     "pack": "npm run build && electron-builder --linux dir --publish never"
@@ -37,8 +38,8 @@
     "wait-on": "^8.0.1"
   },
   "build": {
-    "appId": "org.xodusgaming.nexus",
-    "productName": "Xodus Nexus",
+    "appId": "io.macxus.app",
+    "productName": "MACxus",
     "artifactName": "Xodus-Nexus-${version}-${arch}.${ext}",
     "directories": {
       "output": "release"
@@ -53,6 +54,11 @@
     ],
     "extraResources": [{ "from": "assets/fonts", "to": "fonts" }],
     "afterPack": "scripts/launcher-fonts-after-pack.cjs",
+    "mac": {
+      "category": "public.app-category.games",
+      "target": [{ "target": "dmg", "arch": ["arm64"] }],
+      "icon": "assets/icon.png"
+    },
     "linux": {
       "category": "Game",
       "icon": "assets/icon.png",

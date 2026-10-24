@@ -16,7 +16,7 @@ interface PersistedState {
 
 const defaultDataRoot = path.join(os.homedir(), '.local', 'share', 'xodus-nexus');
 const defaultSettings: Settings = {
-  installRoot: path.join(os.homedir(), 'Games', 'Xodus Nexus'),
+  installRoot: path.join(os.homedir(), 'Games', process.platform === 'darwin' ? 'MACxus' : 'Xodus Nexus'),
   market: 'neutral',
   parallelDownloads: 4,
   downloadLimitMiB: 0,

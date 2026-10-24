@@ -226,7 +226,15 @@ describe('safe keyring setup (#212, #234)', () => {
   });
   it('does not execute platform commands off Linux', async () => {
     const execute = vi.fn();
-    expect((await new KeyringSupport({}, execute, 'darwin').start()).state).toBe('unavailable');
+    expect((await new KeyringSupport({}, execute, 'win32').start()).state).toBe('unavailable');
+    expect(execute).not.toHaveBeenCalled();
+  });
+  it('reports the macOS Keychain as ready without executing commands', async () => {
+    const execute = vi.fn();
+    const status = await new KeyringSupport({}, execute, 'darwin').check();
+    expect(status.state).toBe('ready');
+    expect(status.message).toBe('Le credenziali sono nel Portachiavi di macOS.');
+    expect(status.canStart).toBe(false);
     expect(execute).not.toHaveBeenCalled();
   });
 });

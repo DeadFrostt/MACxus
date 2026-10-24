@@ -196,7 +196,7 @@ describe('new profile defaults', () => {
     created.push(directory);
     const store = new StateStore(directory);
     await store.load();
-    expect(store.settings.installRoot).toContain(path.join('Games', 'Xodus Nexus'));
+    expect(store.settings.installRoot).toContain(path.join('Games', process.platform === 'darwin' ? 'MACxus' : 'Xodus Nexus'));
     expect(store.settings.installRoot).not.toContain('/mnt/data2');
     expect(store.settings.externalXodusRoot).toBe('');
     expect(store.settings.verboseLogs).toBe(false);

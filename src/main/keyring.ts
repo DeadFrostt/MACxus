@@ -134,6 +134,7 @@ export class KeyringSupport {
   }
 
   private async inspect(): Promise<{ status: KeyringStatus; target?: string; provider?: SecretServiceProvider; autoStartAllowed?: boolean }> {
+    if (this.platform === 'darwin') return { status: this.status('ready', 'Le credenziali sono nel Portachiavi di macOS.') };
     if (this.platform !== 'linux') return { status: this.status('unavailable', 'System-keyring setup is available on Linux.') };
     try {
       const owned = await this.bus('b', [...busService, 'NameHasOwner', 's', secretService]);

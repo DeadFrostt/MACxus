@@ -196,6 +196,7 @@ function snapshot(): AppSnapshot {
   if (demoMode) return demoSnapshot({ launcher: app.getVersion(), backend: backendLock.version,
     backendCommit: backendLock.commit, backendCompatibility: backendLock.compatibility }, demoArtwork);
   return {
+    platform: process.platform,
     backend: backend.current,
     runtime: runtime.current,
     games: structuredClone(store.games),
@@ -1672,7 +1673,8 @@ async function createWindow(): Promise<void> {
     minWidth: 800,
     minHeight: 600,
     backgroundColor: '#080a0c',
-    title: 'Xodus Nexus',
+    title: 'MACxus',
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
     icon: fileURLToPath(new URL('../../assets/icon.png', import.meta.url)),
     autoHideMenuBar: true,
     show: !hiddenCapture,
@@ -1848,7 +1850,7 @@ app.whenReady().then(async () => {
   await syncManagedWinePath();
   void enrichLibraryCovers().then(() => emitSnapshot(), () => { /* Covers are optional. */ });
   void enrichDownloadCovers(store.downloads, currentMarket()).catch(() => { /* Covers are optional. */ });
-  void checkLauncherUpdate().then(() => emitSnapshot());
+  if (process.platform !== 'darwin') void checkLauncherUpdate().then(() => emitSnapshot());
   registerIpc();
   launchReady = true;
   if (startupRequest.gameId) {

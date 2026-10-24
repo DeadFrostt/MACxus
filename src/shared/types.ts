@@ -215,6 +215,7 @@ export interface KeyringStatus {
 }
 
 export interface AppSnapshot {
+  platform: NodeJS.Platform;
   backend: BackendStatus;
   runtime: RuntimeStatus;
   games: Game[];
