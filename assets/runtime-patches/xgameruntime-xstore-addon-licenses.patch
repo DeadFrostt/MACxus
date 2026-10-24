@@ -1,0 +1,103 @@
+--- a/dlls/xgameruntime/xstore.c	2026-10-25 00:11:33
++++ b/dlls/xgameruntime/xstore.c	2026-10-25 00:11:33
+@@ -279,23 +279,94 @@
+     IXThreadingImpl_Release( xthreading );
+     return hr;
+ }
++
++static const char store_addon_licenses_identity[] = "XStoreQueryAddOnLicenses";
++
++/* No add-on licenses are known locally: complete successfully with an empty
++ * result so titles waiting on this query (e.g. at "Start game") can proceed. */
++static HRESULT WINAPI XStoreQueryAddOnLicensesProvider( XAsyncOp op, const XAsyncProviderData *data )
++{
++    IXThreadingImpl *xthreading;
++    HRESULT hr;
++
++    TRACE( "op %d, data %p.\n", op, data );
+ 
++    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) return hr;
++
++    switch (op)
++    {
++        case XAsyncOp_Begin:
++            hr = IXThreadingImpl_XAsyncSchedule( xthreading, data->async, 0 );
++            break;
++
++        case XAsyncOp_DoWork:
++            IXThreadingImpl_XAsyncComplete( xthreading, data->async, S_OK, 0 );
++            hr = S_OK;
++            break;
++
++        case XAsyncOp_GetResult:
++        case XAsyncOp_Cleanup:
++        case XAsyncOp_Cancel:
++            hr = S_OK;
++            break;
++
++        default:
++            hr = E_NOTIMPL;
++    }
++
++    IXThreadingImpl_Release( xthreading );
++    return hr;
++}
++
+ static HRESULT WINAPI x_store_XStoreQueryAddOnLicensesAsync( IXStoreImpl6 *iface, const XStoreContextHandle storeContextHandle, XAsyncBlock *async )
+ {
+-    FIXME( "iface %p, storeContextHandle %p, async %p stub!\n", iface, storeContextHandle, async );
+-    return E_NOTIMPL;
++    IXThreadingImpl *xthreading;
++    HRESULT hr;
++
++    TRACE( "iface %p, storeContextHandle %p, async %p, returning no add-on licenses.\n", iface, storeContextHandle, async );
++
++    if (!storeContextHandle || !async) return E_INVALIDARG;
++    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) return hr;
++    hr = IXThreadingImpl_XAsyncBegin( xthreading, async, NULL, store_addon_licenses_identity, "XStoreQueryAddOnLicensesAsync", XStoreQueryAddOnLicensesProvider );
++    IXThreadingImpl_Release( xthreading );
++    return hr;
+ }
+ 
+ static HRESULT WINAPI x_store_XStoreQueryAddOnLicensesResultCount( IXStoreImpl6 *iface, XAsyncBlock *async, UINT32 *count )
+ {
+-    FIXME( "iface %p, async %p, count %p stub!\n", iface, async, count );
+-    return E_NOTIMPL;
++    IXThreadingImpl *xthreading;
++    SIZE_T size = 0;
++    HRESULT hr;
++
++    TRACE( "iface %p, async %p, count %p.\n", iface, async, count );
++
++    if (!async || !count) return E_INVALIDARG;
++    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) return hr;
++    hr = IXThreadingImpl_XAsyncGetResultSize( xthreading, async, &size );
++    IXThreadingImpl_Release( xthreading );
++    *count = SUCCEEDED(hr) ? size / sizeof(XStoreAddonLicense) : 0;
++    return hr;
+ }
+ 
+ static HRESULT WINAPI x_store_XStoreQueryAddOnLicensesResult( IXStoreImpl6 *iface, XAsyncBlock *async, UINT32 count, XStoreAddonLicense *addOnLicenses )
+ {
+-    FIXME( "iface %p, async %p, count %u, addOnLicenses %p stub!\n", iface, async, count, addOnLicenses );
+-    return E_NOTIMPL;
++    IXThreadingImpl *xthreading;
++    SIZE_T size = 0;
++    HRESULT hr;
++
++    TRACE( "iface %p, async %p, count %u, addOnLicenses %p.\n", iface, async, count, addOnLicenses );
++
++    if (!async || (count && !addOnLicenses)) return E_INVALIDARG;
++    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) return hr;
++    if (SUCCEEDED(hr = IXThreadingImpl_XAsyncGetResultSize( xthreading, async, &size )))
++    {
++        /* The result never holds licenses; count must match ResultCount. */
++        if (count != size / sizeof(XStoreAddonLicense)) hr = E_INVALIDARG;
++        else hr = IXThreadingImpl_XAsyncGetResult( xthreading, async, store_addon_licenses_identity,
++                                                   count * sizeof(XStoreAddonLicense), addOnLicenses, NULL );
++    }
++    IXThreadingImpl_Release( xthreading );
++    return hr;
+ }
+ 
+ static HRESULT WINAPI x_store_XStoreQueryConsumableBalanceRemainingAsync( IXStoreImpl6 *iface, const XStoreContextHandle storeContextHandle, const char *storeProductId, XAsyncBlock *async )

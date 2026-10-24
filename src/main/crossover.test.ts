@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, writeFile, rm, chmod } from 'node:fs/promises
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { MAC_RUNTIME_DLLS, crossOverWrapperScript, findCrossOver, prepareCrossOverRunner, stripBuiltinMarker, type CrossOverInstall } from './crossover.js';
+import { MAC_RUNTIME_DLLS, crossOverWrapperScript, findCrossOver, installRuntimeDlls, prepareCrossOverRunner, runtimeOverrideDirectory, stripBuiltinMarker, type CrossOverInstall } from './crossover.js';
 
 const temporary: string[] = [];
 async function tmp(): Promise<string> {
@@ -133,5 +133,71 @@ describe('prepareCrossOverRunner', () => {
     await prepareCrossOverRunner(cx, bottles, runtime);
     expect((await readFile(log, 'utf8')).split('\n').filter((line) => line.includes('reg add'))).toHaveLength(MAC_RUNTIME_DLLS.length);
     expect((await readFile(marker, 'utf8')).trim().split('\n')).toEqual([...MAC_RUNTIME_DLLS].sort());
+  });
+});
+
+describe('installRuntimeDlls overrides', () => {
+  async function setup() {
+    const base = await tmp();
+    const runtime = path.join(base, 'runtime');
+    const overrides = runtimeOverrideDirectory(base);
+    const prefix = path.join(base, 'prefix');
+    await mkdir(runtime);
+    for (const name of MAC_RUNTIME_DLLS) await writeFile(path.join(runtime, name), dll(true));
+    return { base, runtime, overrides, prefix };
+  }
+  const system32 = (prefix: string, name: string) => path.join(prefix, 'drive_c/windows/system32', name);
+
+  it('places the override dir under the data root', () => {
+    expect(runtimeOverrideDirectory('/data')).toBe('/data/runtime-overrides');
+  });
+
+  it('takes a DLL from the override dir when present, stripped, and logs it in Italian', async () => {
+    const { runtime, overrides, prefix } = await setup();
+    await mkdir(overrides);
+    const patched = Buffer.concat([dll(true), Buffer.from('patched')]);
+    await writeFile(path.join(overrides, 'xgameruntime.dll'), patched);
+    const logs: string[] = [];
+    const changed = await installRuntimeDlls(prefix, { dir: runtime, overrideDir: overrides }, (line) => logs.push(line));
+    expect(changed).toEqual([...MAC_RUNTIME_DLLS]);
+    const copied = await readFile(system32(prefix, 'xgameruntime.dll'));
+    expect(copied.subarray(128).toString()).toBe('patched');
+    expect(copied.subarray(64, 80).equals(Buffer.alloc(16))).toBe(true);
+    expect((await readFile(system32(prefix, 'windows.web.dll'))).length).toBe(128);
+    expect(logs).toEqual([`DLL del runtime sostituite da ${overrides}: xgameruntime.dll.`]);
+  });
+
+  it('uses the runtime copies and logs nothing when the override dir is missing', async () => {
+    const { runtime, overrides, prefix } = await setup();
+    const logs: string[] = [];
+    await installRuntimeDlls(prefix, { dir: runtime, overrideDir: overrides }, (line) => logs.push(line));
+    expect((await readFile(system32(prefix, 'xgameruntime.dll'))).length).toBe(128);
+    expect(logs).toEqual([]);
+  });
+
+  it('reinstalls the runtime copy once the override is removed', async () => {
+    const { runtime, overrides, prefix } = await setup();
+    await mkdir(overrides);
+    await writeFile(path.join(overrides, 'xgameruntime.dll'), Buffer.concat([dll(true), Buffer.from('patched')]));
+    await installRuntimeDlls(prefix, { dir: runtime, overrideDir: overrides });
+    await rm(path.join(overrides, 'xgameruntime.dll'));
+    expect(await installRuntimeDlls(prefix, { dir: runtime, overrideDir: overrides })).toEqual(['xgameruntime.dll']);
+    expect((await readFile(system32(prefix, 'xgameruntime.dll'))).length).toBe(128);
+  });
+
+  it('passes the override through prepareCrossOverRunner and re-applies the reg overrides', async () => {
+    const { base, runtime, overrides } = await setup();
+    const log = path.join(base, 'log');
+    const cx = await fakeInstall(base, log);
+    const bottles = path.join(base, 'bottles');
+    await prepareCrossOverRunner(cx, bottles, { dir: runtime, overrideDir: overrides });
+    await mkdir(overrides);
+    await writeFile(path.join(overrides, 'xgameruntime.dll'), Buffer.concat([dll(true), Buffer.from('patched')]));
+    await writeFile(log, '');
+    const logs: string[] = [];
+    await prepareCrossOverRunner(cx, bottles, { dir: runtime, overrideDir: overrides }, 'd3dmetal', (line) => logs.push(line));
+    expect((await readFile(path.join(bottles, 'xbox/drive_c/windows/system32/xgameruntime.dll'))).subarray(128).toString()).toBe('patched');
+    expect((await readFile(log, 'utf8')).split('\n').filter((line) => line.includes('reg add'))).toHaveLength(MAC_RUNTIME_DLLS.length);
+    expect(logs.join('\n')).toContain('xgameruntime.dll');
   });
 });

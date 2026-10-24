@@ -73,13 +73,37 @@ export function crossOverWrapperScript(cx: CrossOverInstall, bottlesRoot: string
   ].join('\n');
 }
 
+/** Where the runtime DLLs come from: the Nexus runtime dir, optionally shadowed per file by an override dir. */
+export interface RuntimeDllSource {
+  dir: string;
+  /** `<dataRoot>/runtime-overrides`: a DLL found here replaces the runtime's copy. */
+  overrideDir?: string;
+}
+
+export function runtimeOverrideDirectory(dataRoot: string): string {
+  return path.join(dataRoot, 'runtime-overrides');
+}
+
+async function readRuntimeDll(source: RuntimeDllSource, name: string): Promise<{ bytes: Buffer; overridden: boolean }> {
+  if (source.overrideDir) {
+    try { return { bytes: await fs.readFile(path.join(source.overrideDir, name)), overridden: true }; } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+  }
+  return { bytes: await fs.readFile(path.join(source.dir, name)), overridden: false };
+}
+
 /** Copies the runtime DLLs into the prefix's system32 as native DLLs; returns the names that changed. */
-export async function installRuntimeDlls(prefix: string, runtimeDllDir: string): Promise<string[]> {
+export async function installRuntimeDlls(prefix: string, runtimeDlls: string | RuntimeDllSource, log: (line: string) => void = () => undefined): Promise<string[]> {
+  const source = typeof runtimeDlls === 'string' ? { dir: runtimeDlls } : runtimeDlls;
   const system32 = path.join(prefix, 'drive_c', 'windows', 'system32');
   await fs.mkdir(system32, { recursive: true });
   const changed: string[] = [];
+  const overridden: string[] = [];
   for (const name of MAC_RUNTIME_DLLS) {
-    const stripped = stripBuiltinMarker(await fs.readFile(path.join(runtimeDllDir, name)));
+    const dll = await readRuntimeDll(source, name);
+    if (dll.overridden) overridden.push(name);
+    const stripped = stripBuiltinMarker(dll.bytes);
     const target = path.join(system32, name);
     let current: Buffer | undefined;
     try { current = await fs.readFile(target); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
@@ -91,6 +115,7 @@ export async function installRuntimeDlls(prefix: string, runtimeDllDir: string):
     } finally { await fs.unlink(temporary).catch(() => undefined); }
     changed.push(name);
   }
+  if (overridden.length) log(`DLL del runtime sostituite da ${source.overrideDir}: ${overridden.join(', ')}.`);
   return changed;
 }
 
@@ -127,8 +152,9 @@ export async function writeRunnerScript(runner: string, content: string): Promis
 export async function prepareCrossOverRunner(
   cx: CrossOverInstall,
   bottlesRoot: string,
-  runtimeDllDir: string,
+  runtimeDlls: string | RuntimeDllSource,
   graphics: Graphics = 'd3dmetal',
+  log: (line: string) => void = () => undefined,
 ): Promise<ProtonRunner> {
   const bottlePath = path.join(bottlesRoot, BOTTLE);
   const env = { ...process.env, CX_BOTTLE_PATH: bottlesRoot };
@@ -143,7 +169,7 @@ export async function prepareCrossOverRunner(
     }
   }
 
-  const changed = await installRuntimeDlls(bottlePath, runtimeDllDir);
+  const changed = await installRuntimeDlls(bottlePath, runtimeDlls, log);
   await ensureRuntimeOverrides(bottlePath, !existed || changed.length > 0, (name) =>
     run(cx.wine, ['--bottle', BOTTLE, ...dllOverrideArgs(name)], { env }), 'CrossOver bottle');
 

@@ -29,8 +29,8 @@ function deps(cx: CrossOverInstall | undefined, highball: string | undefined, ca
   return {
     findCrossOver: async () => cx,
     highballInstalled: () => highball,
-    prepareCrossOver: async (_cx, bottles) => { calls.push(`crossover ${bottles}`); return runner('cx'); },
-    prepareHighball: async (engine, gptk, lib64, bottles, _dlls, env) => { calls.push(`highball ${engine} ${gptk} ${lib64} ${bottles} ${JSON.stringify(env)}`); return runner('hb'); },
+    prepareCrossOver: async (_cx, bottles, dlls) => { calls.push(`crossover ${bottles}`, `dlls ${dlls.dir} ${dlls.overrideDir}`); return runner('cx'); },
+    prepareHighball: async (engine, gptk, lib64, bottles, dlls, env) => { calls.push(`highball ${engine} ${gptk} ${lib64} ${bottles} ${JSON.stringify(env)}`, `dlls ${dlls.dir} ${dlls.overrideDir}`); return runner('hb'); },
     profiles: async () => ({ FH6: { engine: 'highball', env: { D3DM_VENDOR_ID: '0x10de' }, note: 'Profilo da highball-db (CC0)' } }),
   };
 }
@@ -55,7 +55,7 @@ describe('prepareMacRunner', () => {
     const result = await prepareMacRunner({ setting: undefined, storeId: 'OTHER', dataRoot: '/d', runtimeDllDir: '/dll', log: (l) => log.push(l) }, deps(cx, '/hb', calls));
     expect(result.engine).toBe('crossover');
     expect(result.profileEnv).toEqual({});
-    expect(calls).toEqual(['crossover /d/bottles']);
+    expect(calls).toEqual(['crossover /d/bottles', 'dlls /dll /d/runtime-overrides']);
     expect(log.join('\n')).toContain('CrossOver');
   });
 
@@ -65,7 +65,7 @@ describe('prepareMacRunner', () => {
     const result = await prepareMacRunner({ setting: 'crossover', storeId: 'fh6', dataRoot: '/d', runtimeDllDir: '/dll', log: (l) => log.push(l) }, deps(cx, '/hb', calls));
     expect(result.engine).toBe('highball');
     expect(result.profileEnv).toEqual({ D3DM_VENDOR_ID: '0x10de' });
-    expect(calls).toEqual([`highball /hb ${path.join(cx.root, 'lib64/apple_gptk')} ${path.join(cx.root, 'lib64')} /d/bottles {"D3DM_VENDOR_ID":"0x10de"}`]);
+    expect(calls).toEqual([`highball /hb ${path.join(cx.root, 'lib64/apple_gptk')} ${path.join(cx.root, 'lib64')} /d/bottles {"D3DM_VENDOR_ID":"0x10de"}`, 'dlls /dll /d/runtime-overrides']);
     expect(log.join('\n')).toMatch(/Highball/);
     expect(log.join('\n')).toContain('Profilo da highball-db (CC0)');
   });
@@ -75,7 +75,7 @@ describe('prepareMacRunner', () => {
     const cx = await crossOverWithGptk(await tmp());
     const result = await prepareMacRunner({ setting: 'crossover', storeId: 'FH6', dataRoot: '/d', runtimeDllDir: '/dll', log: () => {} }, deps(cx, undefined, calls));
     expect(result.engine).toBe('crossover');
-    expect(calls).toEqual(['crossover /d/bottles']);
+    expect(calls).toEqual(['crossover /d/bottles', 'dlls /dll /d/runtime-overrides']);
   });
 
   it('fails in Italian when Highball is chosen but not installed', async () => {

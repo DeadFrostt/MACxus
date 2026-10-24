@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
-import { dllOverrideArgs, ensureRuntimeOverrides, installRuntimeDlls, shellQuote, writeRunnerScript } from './crossover.js';
+import { dllOverrideArgs, ensureRuntimeOverrides, installRuntimeDlls, shellQuote, writeRunnerScript, type RuntimeDllSource } from './crossover.js';
 import { run } from './process.js';
 import type { ProtonRunner } from './proton.js';
 
@@ -187,7 +187,7 @@ export async function prepareHighballRunner(
   appleGptkRoot: string,
   crossOverLib64: string,
   bottlesRoot: string,
-  runtimeDllDir: string,
+  runtimeDlls: string | RuntimeDllSource,
   extraEnv: Record<string, string> = {},
   log: (line: string) => void = () => undefined,
 ): Promise<ProtonRunner> {
@@ -212,7 +212,7 @@ export async function prepareHighballRunner(
     }
   }
 
-  const changed = await installRuntimeDlls(prefix, runtimeDllDir);
+  const changed = await installRuntimeDlls(prefix, runtimeDlls, log);
   await ensureRuntimeOverrides(prefix, !existed || changed.length > 0, (name) => run(wine, dllOverrideArgs(name), { env }), 'Highball prefix');
 
   const runner = path.join(bottlesRoot, RUNNER);
