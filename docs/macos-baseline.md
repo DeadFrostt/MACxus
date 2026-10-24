@@ -60,3 +60,11 @@ These are reasoned from the failure messages and have not been verified by chang
 ## `npm run typecheck`
 
 Passed with no errors (`tsc --noEmit` and `tsc -p tsconfig.electron.json --noEmit`, exit 0).
+
+## Packaging
+
+- `npm run dist:mac` (clean, typecheck, vite build, tsc, electron-builder `--mac dmg --arm64`). It skips `npm test` because the 83 baseline failures would stop `npm run build`.
+- Artifact: `release/MACxus-0.3.11-arm64.dmg` (126 MiB, 132396061 bytes) and `release/mac-arm64/MACxus.app` (329 MB). Unsigned (`mac.identity: null`); signing and notarization are a later plan. `release/` is git-ignored.
+- First run of electron-builder failed once at `hdiutil resize` (error 35, a transient lock); the retry succeeded after detaching the stale image.
+- Smoke test (built app, no login, no clicks): the window renders the Nexus UI (Welcome / sign-in screen) with no crash and no log output beyond a harmless sandbox_extension warning. About 15 s after launch macOS showed a Keychain prompt from `xodus-cli` for "Xodus Service"; it was not approved, and the app was quit cleanly.
+- User data directory is `~/Library/Application Support/xodus-nexus` (package name), not `MACxus`.
