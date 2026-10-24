@@ -27,6 +27,7 @@ function defaultSettings(userData: string, platform: NodeJS.Platform): Settings 
     externalXodusRoot: '',
     runtimeRoot: path.join(dataRoot, 'runtimes'),
     verboseLogs: false,
+    ...(platform === 'darwin' ? { macEngine: 'crossover' as const } : {}),
   };
 }
 

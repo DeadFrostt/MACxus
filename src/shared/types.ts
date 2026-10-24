@@ -183,6 +183,21 @@ export interface Settings {
   storageChosen?: boolean;
   /** macOS: APFS sparse bundles remounted at startup. */
   apfsImages?: string[];
+  /** macOS: Wine engine used to run games (default CrossOver). */
+  macEngine?: MacEngine;
+}
+
+export type MacEngine = 'crossover' | 'highball';
+
+/** macOS: state of the optional Highball engine. */
+export interface MacEngineStatus {
+  highballInstalled: boolean;
+  highballTag: string;
+  installing: boolean;
+  downloadedBytes?: number;
+  totalBytes?: number;
+  phase?: string;
+  error?: string;
 }
 
 export interface VolumeInfo {
@@ -243,6 +258,8 @@ export interface AppSnapshot {
   disconnectedGames?: string[];
   /** macOS: why the APFS image could not be mounted at startup. */
   storageError?: string;
+  /** macOS: Wine engine availability and Highball install progress. */
+  macEngine?: MacEngineStatus;
 }
 
 export interface InstallRequest {
@@ -369,6 +386,7 @@ export interface LauncherApi {
   checkBackendUpdate(): Promise<BackendStatus>;
   updateBackend(): Promise<void>;
   rebuildBackend(): Promise<void>;
+  installHighballEngine(): Promise<void>;
   refreshRuntime(): Promise<RuntimeStatus>;
   checkRuntimeUpdate(): Promise<RuntimeStatus>;
   checkNexusRuntime(): Promise<RuntimeStatus>;

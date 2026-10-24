@@ -11,6 +11,7 @@ const api: LauncherApi = {
   checkBackendUpdate: () => ipcRenderer.invoke('backend-check-update'),
   updateBackend: () => ipcRenderer.invoke('backend-update'),
   rebuildBackend: () => ipcRenderer.invoke('backend-rebuild'),
+  installHighballEngine: () => ipcRenderer.invoke('install-highball-engine'),
   refreshRuntime: () => ipcRenderer.invoke('runtime-refresh'),
   checkRuntimeUpdate: () => ipcRenderer.invoke('runtime-check-update'),
   checkNexusRuntime: () => ipcRenderer.invoke('runtime-check-nexus'),

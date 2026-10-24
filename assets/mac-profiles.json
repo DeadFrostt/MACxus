@@ -1,0 +1,20 @@
+{
+  "9N4XW3N02MNJ": {
+    "engine": "highball",
+    "env": {
+      "D3DM_VENDOR_ID": "0x10de",
+      "D3DM_DEVICE_ID": "0x2786",
+      "D3DM_DEVICE_DESCRIPTION": "NVIDIA GeForce RTX 4070"
+    },
+    "note": "Profilo da highball-db (CC0)"
+  },
+  "9NR1R1XWLCNB": {
+    "engine": "highball",
+    "env": {
+      "D3DM_VENDOR_ID": "0x10de",
+      "D3DM_DEVICE_ID": "0x2786",
+      "D3DM_DEVICE_DESCRIPTION": "NVIDIA GeForce RTX 4070"
+    },
+    "note": "Profilo da highball-db (CC0)"
+  }
+}

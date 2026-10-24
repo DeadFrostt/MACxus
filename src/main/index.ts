@@ -5,7 +5,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
-import type { AppSnapshot, AuthStatus, DownloadTask, Game, GameLaunchOptions, GameOperation, GameUpdate, InstallRequest, Settings } from '../shared/types.js';
+import type { AppSnapshot, AuthStatus, DownloadTask, Game, GameLaunchOptions, GameOperation, GameUpdate, InstallRequest, MacEngineStatus, Settings } from '../shared/types.js';
 import { downloadFailure, safeProductId } from '../shared/utils.js';
 import { downloadLimitArgs, downloadLimitKiB } from '../shared/download-bandwidth.js';
 import { DownloadBandwidthControls, isBandwidthOnlyPatch } from './download-bandwidth.js';
@@ -17,8 +17,9 @@ import { run, spawnTracked } from './process.js';
 import { inspectGameDirectory, StateStore } from './store.js';
 import { RuntimeManager } from './runtime.js';
 import { prepareProtonRunner, syncPrefixUserLocale, syncUnrealCultureGameIni, type ProtonRunner } from './proton.js';
-import { findCrossOver, prepareCrossOverRunner } from './crossover.js';
-import { CROSSOVER_MISSING, macRuntimeAvailable, runtimeDllDirectory, serviceSocketPathFits } from './mac-launch.js';
+import { highballEngineInstalled, HIGHBALL_ENGINE_TAG, installHighballEngine } from './highball-engine.js';
+import { prepareMacRunner } from './mac-engine.js';
+import { macRuntimeAvailable, runtimeDllDirectory, serviceSocketPathFits } from './mac-launch.js';
 import { CatalogService } from './catalog.js';
 import { cloudSaveRuntime, selectedWinePath, startXodusService, storeContentRuntime, unbridgedCloudSaveRuntime, type XodusServiceSession } from './xodus-service.js';
 import { GameLogReducer, gameLoggingEnvironment, gameWindowEnvironment } from './game-log.js';
@@ -213,9 +214,31 @@ function snapshot(): AppSnapshot {
     downloadProgressSupported: Boolean(backend.current.capabilities.streamingProgressJson),
     gameOperation: gameOperation ? structuredClone(gameOperation) : undefined,
     storageError,
+    macEngine: process.platform === 'darwin' ? macEngineStatus() : undefined,
     disconnectedGames: process.platform === 'darwin' && volumeCacheReady
       ? store.games.filter(game => installRootStatus(game.path, volumeCache) === 'disconnected').map(game => game.id) : undefined,
   };
+}
+
+let highballInstall: { installing: boolean; downloadedBytes?: number; totalBytes?: number; phase?: string; error?: string } = { installing: false };
+function macEngineStatus(): MacEngineStatus {
+  return { ...highballInstall, highballInstalled: Boolean(highballEngineInstalled(path.dirname(store.settings.runtimeRoot))), highballTag: HIGHBALL_ENGINE_TAG };
+}
+async function installHighball(): Promise<void> {
+  if (process.platform !== 'darwin') throw Error('Il motore Highball è disponibile solo su macOS.');
+  if (highballInstall.installing) throw Error('Installazione del motore Highball già in corso.');
+  highballInstall = { installing: true, phase: 'Download del motore Highball…' };
+  emitSnapshot();
+  try {
+    await installHighballEngine(path.dirname(store.settings.runtimeRoot), fetch, (downloadedBytes, totalBytes) => {
+      highballInstall = { installing: true, downloadedBytes, totalBytes, phase: downloadedBytes >= totalBytes ? 'Verifica ed estrazione del motore Highball…' : 'Download del motore Highball…' };
+      scheduleSnapshot();
+    });
+    highballInstall = { installing: false, phase: 'Motore Highball installato e verificato.' };
+  } catch (error) {
+    highballInstall = { installing: false, error: error instanceof Error ? error.message : String(error) };
+    throw error;
+  } finally { emitSnapshot(); }
 }
 
 let volumeCache: VolumeInfo[] = [];
@@ -943,7 +966,7 @@ async function prepareGameLaunch(id: string): Promise<void> {
     title: game.title,
     kind: 'launch',
     status: 'preparing',
-    phase: process.platform === 'darwin' ? 'Preparazione di CrossOver e Xodus…' : 'Preparing Proton and Xodus…',
+    phase: process.platform === 'darwin' ? 'Preparazione del motore Wine e di Xodus…' : 'Preparing Proton and Xodus…',
     log: [],
     logPath,
     startedAt: new Date().toISOString(),
@@ -975,13 +998,17 @@ async function prepareGameLaunch(id: string): Promise<void> {
     const steamRoot = path.join(app.getPath('home'), '.steam', 'root');
     const isMac = process.platform === 'darwin';
     let protonRunner: ProtonRunner | undefined;
+    let macEngine = '';
+    let macProfileEnv: Record<string, string> = {};
     if (isMac) {
-      // macOS: the game runs in the shared CrossOver bottle. The selected runtime
+      // macOS: the game runs in the shared CrossOver bottle, or in the Highball
+      // prefix when that engine is chosen (globally or by the game's profile). The selected runtime
       // `wine` is the Linux build and is never executed here; it only locates
       // the runtime DLLs copied into the bottle.
-      const crossOver = await findCrossOver();
-      if (!crossOver) throw new Error(CROSSOVER_MISSING);
-      protonRunner = await prepareCrossOverRunner(crossOver, path.join(dataRoot, 'bottles'), runtimeDllDirectory(wine));
+      const mac = await prepareMacRunner({ setting: store.settings.macEngine, storeId: inspected.storeId ?? game.storeId, dataRoot, runtimeDllDir: runtimeDllDirectory(wine), log: writeLaunchLog });
+      protonRunner = mac.runner;
+      macEngine = mac.engine;
+      macProfileEnv = mac.profileEnv;
       args[2] = protonRunner.command;
     } else {
       launchWrapper = await prepareGameWrapper(wine, game.launchTools, path.join(dataRoot, 'launch-wrappers'), process.env, game.path);
@@ -1006,6 +1033,8 @@ async function prepareGameLaunch(id: string): Promise<void> {
     const environment = antiCheatEnvironment(gameLocaleEnvironment(gameWindowEnvironment(gameLoggingEnvironment(protonRunner
       ? { ...process.env }
       : { ...process.env, WINEPREFIX: legacyPrefixRoot, WINEARCH: 'win64' }, verboseLogs)), locale));
+    // Per-game macOS profile values (whitelisted) apply unless the user already set them.
+    for (const [key, value] of Object.entries(macProfileEnv)) if (environment[key] === undefined) environment[key] = value;
     const contentRoots = await contentManager().roots(game).catch(error => {
       addGameLog(`Managed content discovery unavailable: ${(error as Error).message}`);
       return [] as string[];
@@ -1029,7 +1058,7 @@ async function prepareGameLaunch(id: string): Promise<void> {
       environment.XODUS_SAVE_SYNC = 'auto';
       addGameLog('Xbox cloud save preview is enabled. Saves may download from and upload to the account cloud.');
     }
-    if (isMac && protonRunner) addGameLog(`CrossOver bottle: ${protonRunner.compatibilityDataPath}`);
+    if (isMac && protonRunner) addGameLog(`${macEngine === 'highball' ? 'Prefisso Highball' : 'CrossOver bottle'}: ${protonRunner.compatibilityDataPath}`);
     else if (protonRunner) addGameLog(`Proton prefix: ${protonRunner.compatibilityDataPath}/pfx`);
     else await fs.mkdir(legacyPrefixRoot, { recursive: true });
     const tracked = await spawnGameProcess(binary, args, {
@@ -1123,7 +1152,7 @@ async function installGameVcRuntime(id: string): Promise<void> {
     title: game.title,
     kind: 'prerequisite',
     status: 'preparing',
-    phase: process.platform === 'darwin' ? 'Preparazione della bottle CrossOver…' : 'Preparing the Proton prefix…',
+    phase: process.platform === 'darwin' ? 'Preparazione della bottle Wine…' : 'Preparing the Proton prefix…',
     log: [],
     logPath,
     startedAt: new Date().toISOString(),
@@ -1144,11 +1173,9 @@ async function installGameVcRuntime(id: string): Promise<void> {
     let protonRunner: ProtonRunner | undefined;
     let prefix: string;
     if (process.platform === 'darwin') {
-      // macOS: VC++ goes into the shared CrossOver bottle, whose drive_c sits
-      // directly in the bottle directory (no pfx/ level).
-      const crossOver = await findCrossOver();
-      if (!crossOver) throw new Error(CROSSOVER_MISSING);
-      protonRunner = await prepareCrossOverRunner(crossOver, path.join(dataRoot, 'bottles'), runtimeDllDirectory(wine));
+      // macOS: VC++ goes into the same prefix the game launches in (CrossOver
+      // bottle or Highball prefix), whose drive_c sits directly in it (no pfx/).
+      protonRunner = (await prepareMacRunner({ setting: store.settings.macEngine, storeId: inspected.storeId ?? game.storeId, dataRoot, runtimeDllDir: runtimeDllDirectory(wine), log: addLine })).runner;
       prefix = protonRunner.compatibilityDataPath;
     } else {
       protonRunner = await prepareProtonRunner(wine, compatibilityDataPath, path.join(app.getPath('home'), '.steam', 'root'));
@@ -1172,7 +1199,7 @@ async function installGameVcRuntime(id: string): Promise<void> {
       }, controller.signal);
       if (controller.signal.aborted) throw new Error('VC++ installation was cancelled.');
       preparationControllers.delete(operationId);
-      addLine(process.platform === 'darwin' ? 'Installer Microsoft verificato (SHA-256). Installazione nella bottle CrossOver…' : 'Microsoft installer SHA-256 verified. Installing into this game’s Proton prefix…');
+      addLine(process.platform === 'darwin' ? 'Installer Microsoft verificato (SHA-256). Installazione nella bottle Wine…' : 'Microsoft installer SHA-256 verified. Installing into this game’s Proton prefix…');
       const tracked = spawnTracked(protonRunner.command, [installer, '/install', '/quiet', '/norestart'], {
         env: gameLoggingEnvironment({ ...process.env }),
         onLine: addLine,
@@ -1187,7 +1214,7 @@ async function installGameVcRuntime(id: string): Promise<void> {
       if (!installed || !versionAtLeast(installed, VC_REDIST_VERSION)) {
         throw new Error(`Microsoft VC++ installer exited with code ${result.code}, but required version ${VC_REDIST_VERSION} was not registered (found ${installed ?? 'none'}).`);
       }
-      addLine(process.platform === 'darwin' ? `Microsoft VC++ ${installed} installato nella bottle CrossOver.` : `Microsoft VC++ ${installed} installed in this game’s Proton prefix.`);
+      addLine(process.platform === 'darwin' ? `Microsoft VC++ ${installed} installato nella bottle Wine.` : `Microsoft VC++ ${installed} installed in this game’s Proton prefix.`);
     }
     if (gameOperation?.id === operationId) {
       gameOperation.status = 'complete';
@@ -1314,6 +1341,7 @@ function registerDemoIpc(catalogMarket: () => string): void {
   ipcMain.handle('create-game-shortcut', () => { throw new Error('Shortcuts are unavailable in demo mode.'); });
   ipcMain.handle('add-to-steam', () => { throw new Error('Steam integration is unavailable in demo mode.'); });
   ipcMain.handle('install-game-vc-runtime', () => {});
+  ipcMain.handle('install-highball-engine', () => { throw new Error('Non disponibile in modalità demo.'); });
   ipcMain.handle('cancel-game', () => {});
   ipcMain.handle('update-settings', (_event, patch: Partial<Settings>) => ({ ...snapshot().settings, ...patch }));
   ipcMain.handle('list-volumes', () => []);
@@ -1667,6 +1695,10 @@ function registerIpc(): void {
     if (typeof patch.runtimeRoot === 'string') allowed.runtimeRoot = path.resolve(patch.runtimeRoot);
     if (typeof patch.verboseLogs === 'boolean') allowed.verboseLogs = patch.verboseLogs;
     if (typeof patch.firstRunCompleted === 'boolean') allowed.firstRunCompleted = patch.firstRunCompleted;
+    if (process.platform === 'darwin' && (patch.macEngine === 'crossover' || patch.macEngine === 'highball')) {
+      if (patch.macEngine !== store.settings.macEngine) ensureIdle();
+      allowed.macEngine = patch.macEngine;
+    }
     const settings = await store.setSettings(allowed);
     if (patch.downloadLimitMiB !== undefined) {
       try { await downloadLimitControls.apply(settings.downloadLimitMiB ?? 0); }
@@ -1674,6 +1706,8 @@ function registerIpc(): void {
     }
     // A bandwidth-only change must not restart authentication or refresh devices.
     if (isBandwidthOnlyPatch(patch)) { emitSnapshot(); return settings; }
+    // Choosing the Wine engine only affects the next launch.
+    if (Object.keys(patch).length > 0 && Object.keys(patch).every(key => key === 'macEngine')) { emitSnapshot(); return settings; }
     backend.setExternalRoot(settings.externalXodusRoot);
     runtime.setRoot(settings.runtimeRoot);
     await backend.refresh();
@@ -1683,6 +1717,7 @@ function registerIpc(): void {
     return settings;
   });
   ipcMain.handle('list-volumes', () => process.platform === 'darwin' ? refreshVolumes() : []);
+  ipcMain.handle('install-highball-engine', () => installHighball());
   ipcMain.handle('set-install-root', async (_event, root: string) => {
     if (process.platform !== 'darwin') throw Error('La scelta del disco è disponibile solo su macOS.');
     if (typeof root !== 'string' || !path.isAbsolute(root)) throw Error('Percorso non valido.');

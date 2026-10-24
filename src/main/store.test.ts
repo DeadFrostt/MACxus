@@ -203,6 +203,25 @@ describe('new profile defaults', () => {
   });
 });
 
+describe('macOS Wine engine setting', () => {
+  it('defaults to CrossOver on macOS, persists Highball and leaves Linux without the key', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'xodus-nexus-engine-'));
+    created.push(directory);
+    const mac = new StateStore(directory, 'darwin');
+    await mac.load();
+    expect(mac.settings.macEngine).toBe('crossover');
+    await mac.setSettings({ macEngine: 'highball' });
+    const reloaded = new StateStore(directory, 'darwin');
+    await reloaded.load();
+    expect(reloaded.settings.macEngine).toBe('highball');
+    const linuxDir = await mkdtemp(path.join(tmpdir(), 'xodus-nexus-engine-linux-'));
+    created.push(linuxDir);
+    const linux = new StateStore(linuxDir, 'linux');
+    await linux.load();
+    expect(linux.settings).not.toHaveProperty('macEngine');
+  });
+});
+
 describe('install queue history', () => {
   it('keeps all pending rows beyond the history limit and serializes concurrent saves', async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'xodus-queue-persist-')); created.push(directory);
