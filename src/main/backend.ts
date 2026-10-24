@@ -5,6 +5,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import type { BackendCapabilities, BackendStatus } from '../shared/types.js';
 import { parseBackendHelp } from '../shared/utils.js';
 import { run } from './process.js';
+import { findLocalSigningIdentity, isSignedWithLocalIdentity, signBackendBinary } from './codesign.js';
 import { backendLock, backendRecipeSha256, backendAssets, compareVersions } from './backend-package.js';
 import { discoverBackend, installBackend, type BackendArtifact } from './backend-releases.js';
 
@@ -64,7 +65,42 @@ export class BackendManager {
       externalRoot,
       capabilities: EMPTY_CAPABILITIES,
       prerequisites: { git: false, cargo: false, rustc: false, protoc: false },
+      signingIdentity: false,
     };
+  }
+
+  /**
+   * macOS: sign the two backend binaries with the user's local certificate so their
+   * identity is stable across rebuilds (no repeated Keychain prompts). Never throws.
+   */
+  private async signBinaries(cli: string, service: string, log: (line: string) => void, onlyIfUnsigned = false): Promise<void> {
+    if (this.platform !== 'darwin') return;
+    const identity = await findLocalSigningIdentity();
+    this.status.signingIdentity = Boolean(identity);
+    if (!identity) {
+      log('Certificato «MACxus Local Signing» non trovato: il backend resta con firma ad-hoc e macOS chiederà di nuovo l’accesso al Portachiavi dopo ogni ricompilazione. Vedi Impostazioni per crearlo.');
+      return;
+    }
+    for (const [binary, identifier] of [[cli, 'io.macxus.xodus-cli'], [service, 'io.macxus.xodus-service']] as const) {
+      try {
+        if (onlyIfUnsigned && await isSignedWithLocalIdentity(binary)) continue;
+        await signBackendBinary(binary, identifier, identity);
+        log(`Firmato ${path.basename(binary)} con «MACxus Local Signing».`);
+      } catch (error) {
+        log(`Firma di ${path.basename(binary)} non riuscita (resta la firma ad-hoc): ${(error as Error).message}`);
+      }
+    }
+  }
+
+  /** macOS startup: sign the current managed backend if it is not yet signed with the local certificate. */
+  async ensureSigned(onStatus: () => void = () => {}): Promise<void> {
+    if (this.platform !== 'darwin') return;
+    try {
+      const binary = this.status.source === 'managed' ? this.status.binaryPath : undefined;
+      if (binary) await this.signBinaries(binary, path.join(path.dirname(binary), 'xodus-service'), line => this.emitLog('backend', line), true);
+      else this.status.signingIdentity = Boolean(await findLocalSigningIdentity());
+    } catch (error) { this.emitLog('backend', `Controllo firma non riuscito: ${(error as Error).message}`); }
+    onStatus();
   }
 
   get current(): BackendStatus { return structuredClone(this.status); }
@@ -268,6 +304,7 @@ export class BackendManager {
       });
       if (result.code !== 0) throw new Error(`cargo build exited with code ${result.code}`);
       const builtCli = path.join(target, 'release', 'xodus-cli');
+      await this.signBinaries(builtCli, path.join(target, 'release', 'xodus-service'), log);
       const capabilities = await this.validate(builtCli);
       if (!capabilities?.login || !capabilities.streaming || !capabilities.account || !capabilities.externalAuth || !capabilities.packageSelection) throw new Error('The built backend failed command validation.');
       const runHelp = await run(builtCli, ['run', '--help'], { maxOutput: 100_000 });

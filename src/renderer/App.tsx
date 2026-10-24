@@ -32,6 +32,7 @@ const emptySnapshot: AppSnapshot = {
     externalRoot: '',
     capabilities: { commands: [], account: false, login: false, logout: false, download: false, streaming: false, run: false },
     prerequisites: { git: false, cargo: false, rustc: false, protoc: false },
+    signingIdentity: false,
   },
   runtime: {
     installed: false, checking: false, updating: false,
@@ -905,6 +906,7 @@ export function SettingsPage({ data, toast }: { data: AppSnapshot; toast: (value
       <div className="backend-diagnostic-action"><BackendLogButton toast={toast} /><p className="fine-print">Local operation results and safe error codes. No passwords, tokens or account contents are recorded.</p></div>
       {isMac ? <>
         <p className="fine-print">Su macOS il backend Nexus si compila sul tuo Mac dal codice sorgente bloccato: non esiste una versione precompilata per Mac. Servono Git, Rust (Cargo) e protoc; la compilazione richiede alcuni minuti.</p>
+        {!data.backend.signingIdentity ? <div className="alert amber"><CircleAlert /><span>Senza il certificato «MACxus Local Signing» macOS chiederà di nuovo l’accesso al Portachiavi dopo ogni ricompilazione del backend. Per evitarlo: apri Accesso Portachiavi → menu Accesso Portachiavi → Assistente Certificato → Crea un certificato…, chiamalo «MACxus Local Signing», scegli tipo identità «Radice autofirmata» e tipo di certificato «Firma del codice»; poi riavvia MACxus.</span></div> : null}
         <div className="button-row end"><button className="primary" disabled={Boolean(busy) || data.backend.updating || data.backend.checking} onClick={() => invoke('backend-rebuild', () => window.launcher.rebuildBackend(), 'Il backend è stato compilato e attivato.')}>{busy === 'backend-rebuild' || data.backend.updating ? <LoaderCircle className="spin" /> : <Github />}Compila il backend</button></div>
         {data.backend.updating || logs.length > 0 ? <pre className="build-log">{logs.join('\n') || 'In attesa dell’output della compilazione…'}</pre> : null}
       </> : <div className="button-row end"><button className="secondary" disabled={Boolean(busy) || data.backend.checking || data.backend.updating} onClick={() => invoke('backend-check', () => window.launcher.checkBackendUpdate())}>{busy === 'backend-check' || data.backend.checking ? <LoaderCircle className="spin" /> : <RefreshCw />}Check for updates</button>{data.backend.releaseAvailable && data.backend.updateAvailable ? <button className="primary" disabled={Boolean(busy) || data.backend.updating || data.backend.checking} onClick={() => invoke('backend-update', () => window.launcher.updateBackend(), 'The Nexus backend was verified, installed and activated.')}>{busy === 'backend-update' || data.backend.updating ? <LoaderCircle className="spin" /> : <ArrowDownToLine />}{data.backend.available ? 'Update backend' : 'Install backend'}</button> : null}</div>}

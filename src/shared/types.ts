@@ -51,6 +51,8 @@ export interface BackendStatus {
   capabilities: BackendCapabilities;
   prerequisites: { git: boolean; cargo: boolean; rustc: boolean; protoc: boolean };
   blockReason?: string;
+  /** macOS: the "MACxus Local Signing" certificate exists, so the backend is signed with a stable identity. */
+  signingIdentity: boolean;
   linuxRunPatch?: string;
   version?: string;
   delivery?: 'release' | 'local';

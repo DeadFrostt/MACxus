@@ -1669,6 +1669,7 @@ function registerIpc(): void {
     backend.setExternalRoot(settings.externalXodusRoot);
     runtime.setRoot(settings.runtimeRoot);
     await backend.refresh();
+  if (process.platform === 'darwin') void backend.ensureSigned(() => emitSnapshot());
     await refreshAccount(false);
     await runtime.refresh();
     emitSnapshot();
