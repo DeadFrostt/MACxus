@@ -15,7 +15,9 @@ import { BackendManager } from './backend.js';
 import { run, spawnTracked } from './process.js';
 import { inspectGameDirectory, StateStore } from './store.js';
 import { RuntimeManager } from './runtime.js';
-import { prepareProtonRunner, syncPrefixUserLocale, syncUnrealCultureGameIni } from './proton.js';
+import { prepareProtonRunner, syncPrefixUserLocale, syncUnrealCultureGameIni, type ProtonRunner } from './proton.js';
+import { findCrossOver, prepareCrossOverRunner } from './crossover.js';
+import { CROSSOVER_MISSING, runtimeDllDirectory, serviceSocketPathFits } from './mac-launch.js';
 import { CatalogService } from './catalog.js';
 import { cloudSaveRuntime, selectedWinePath, startXodusService, storeContentRuntime, unbridgedCloudSaveRuntime, type XodusServiceSession } from './xodus-service.js';
 import { GameLogReducer, gameLoggingEnvironment, gameWindowEnvironment } from './game-log.js';
@@ -889,11 +891,29 @@ async function prepareGameLaunch(id: string): Promise<void> {
     const legacyPrefixRoot = path.join(dataRoot, 'prefixes', game.id);
     const compatibilityDataPath = path.join(dataRoot, 'compatdata', game.id);
     const steamRoot = path.join(app.getPath('home'), '.steam', 'root');
-    launchWrapper = await prepareGameWrapper(wine, game.launchTools, path.join(dataRoot, 'launch-wrappers'), process.env, game.path);
-    const protonRunner = await prepareProtonRunner(wine, compatibilityDataPath, steamRoot, launchWrapper.command);
+    const isMac = process.platform === 'darwin';
+    let protonRunner: ProtonRunner | undefined;
+    if (isMac) {
+      // macOS: the game runs in the shared CrossOver bottle. The selected runtime
+      // `wine` is the Linux build and is never executed here; it only locates
+      // the runtime DLLs copied into the bottle.
+      const crossOver = await findCrossOver();
+      if (!crossOver) throw new Error(CROSSOVER_MISSING);
+      protonRunner = await prepareCrossOverRunner(crossOver, path.join(dataRoot, 'bottles'), runtimeDllDirectory(wine));
+      args[2] = protonRunner.command;
+    } else {
+      launchWrapper = await prepareGameWrapper(wine, game.launchTools, path.join(dataRoot, 'launch-wrappers'), process.env, game.path);
+      protonRunner = await prepareProtonRunner(wine, compatibilityDataPath, steamRoot, launchWrapper.command);
+      args[2] = preparedGameWine(protonRunner, launchWrapper.command);
+    }
     const wineCommand = protonRunner?.command ?? wine;
-    args[2] = preparedGameWine(protonRunner, launchWrapper.command);
-    if (inspected.vcRedistEncrypted) {
+    // A CrossOver bottle keeps drive_c directly in the bottle directory, while
+    // a Proton compatdata directory keeps it under pfx/. Both prefix helpers
+    // below take the prefix itself, so on macOS they get the bottle directory.
+    const gamePrefix = isMac && protonRunner
+      ? protonRunner.compatibilityDataPath
+      : protonRunner ? path.join(compatibilityDataPath, 'pfx') : legacyPrefixRoot;
+    if (!isMac && inspected.vcRedistEncrypted) {
       if (!protonRunner) throw new Error('This encrypted VC++ prerequisite requires a Proton prefix. Select Xodus Runtime in Settings.');
       const installed = await installedVcRuntimeVersion(path.join(compatibilityDataPath, 'pfx'));
       if (!installed || !versionAtLeast(installed, VC_REDIST_VERSION)) {
@@ -911,11 +931,15 @@ async function prepareGameLaunch(id: string): Promise<void> {
     if (contentRoots.length) environment.XODUS_CONTENT_ROOTS = [environment.XODUS_CONTENT_ROOTS, ...contentRoots.map(root => 'Z:' + root.replaceAll('/', '\\'))].filter(Boolean).join(';');
     if (locale) {
       addGameLog(`Selected package language: ${locale}.`);
-      await syncPrefixUserLocale(wineCommand, protonRunner ? path.join(compatibilityDataPath, 'pfx') : legacyPrefixRoot, locale, environment, addGameLog);
+      await syncPrefixUserLocale(wineCommand, gamePrefix, locale, environment, addGameLog);
     }
-    await syncUnrealCultureGameIni(protonRunner ? path.join(compatibilityDataPath, 'pfx') : legacyPrefixRoot, game.path, titleId, locale, addGameLog);
+    await syncUnrealCultureGameIni(gamePrefix, game.path, titleId, locale, addGameLog);
     if (cloudRuntime) {
-      serviceSession = await startXodusService(binary, app.getPath('userData'), addGameLog);
+      let serviceRoot = app.getPath('userData');
+      // macOS caps AF_UNIX socket paths at 104 bytes; fall back to the temp dir
+      // when <userData>/service-sessions/game-XXXXXX/xodus.sock would not fit.
+      if (isMac && !serviceSocketPathFits(path.join(serviceRoot, 'service-sessions', 'game-XXXXXX', 'xodus.sock'))) serviceRoot = os.tmpdir();
+      serviceSession = await startXodusService(binary, serviceRoot, addGameLog);
       serviceSessions.set(operationId, serviceSession);
       environment.XODUS_SOCKET = serviceSession.socketPath;
       environment.XODUS_BRIDGE_PORT = String(serviceSession.bridgePort);
@@ -923,7 +947,8 @@ async function prepareGameLaunch(id: string): Promise<void> {
       environment.XODUS_SAVE_SYNC = 'auto';
       addGameLog('Xbox cloud save preview is enabled. Saves may download from and upload to the account cloud.');
     }
-    if (protonRunner) addGameLog(`Proton prefix: ${protonRunner.compatibilityDataPath}/pfx`);
+    if (isMac && protonRunner) addGameLog(`CrossOver bottle: ${protonRunner.compatibilityDataPath}`);
+    else if (protonRunner) addGameLog(`Proton prefix: ${protonRunner.compatibilityDataPath}/pfx`);
     else await fs.mkdir(legacyPrefixRoot, { recursive: true });
     const tracked = await spawnGameProcess(binary, args, {
       cwd: game.path,
@@ -1032,9 +1057,20 @@ async function installGameVcRuntime(id: string): Promise<void> {
   preparationControllers.set(operationId, controller);
   try {
     const compatibilityDataPath = path.join(dataRoot, 'compatdata', game.id);
-    const protonRunner = await prepareProtonRunner(wine, compatibilityDataPath, path.join(app.getPath('home'), '.steam', 'root'));
-    if (!protonRunner) throw new Error('VC++ installation requires Xodus Proton, not a standalone Wine binary.');
-    const prefix = path.join(compatibilityDataPath, 'pfx');
+    let protonRunner: ProtonRunner | undefined;
+    let prefix: string;
+    if (process.platform === 'darwin') {
+      // macOS: VC++ goes into the shared CrossOver bottle, whose drive_c sits
+      // directly in the bottle directory (no pfx/ level).
+      const crossOver = await findCrossOver();
+      if (!crossOver) throw new Error(CROSSOVER_MISSING);
+      protonRunner = await prepareCrossOverRunner(crossOver, path.join(dataRoot, 'bottles'), runtimeDllDirectory(wine));
+      prefix = protonRunner.compatibilityDataPath;
+    } else {
+      protonRunner = await prepareProtonRunner(wine, compatibilityDataPath, path.join(app.getPath('home'), '.steam', 'root'));
+      if (!protonRunner) throw new Error('VC++ installation requires Xodus Proton, not a standalone Wine binary.');
+      prefix = path.join(compatibilityDataPath, 'pfx');
+    }
     const previous = await installedVcRuntimeVersion(prefix);
     if (previous && versionAtLeast(previous, VC_REDIST_VERSION)) {
       addLine(`VC++ ${previous} is already installed. No changes needed.`);
