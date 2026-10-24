@@ -21,6 +21,7 @@ import { GameDetails } from './GameDetails';
 import { DownloadCancelDialog } from './DownloadCancelDialog';
 import { KeyringSetup } from './KeyringSetup';
 import { StoragePicker } from './StoragePicker';
+import { MacEngineCard } from './MacEngineCard';
 import { DiagnosticReportButton } from './DiagnosticReport';
 import type { DownloadCancelOptions } from '../shared/types';
 export type { LibraryFilters } from './library-preferences';
@@ -911,6 +912,8 @@ export function SettingsPage({ data, toast }: { data: AppSnapshot; toast: (value
         {data.backend.updating || logs.length > 0 ? <pre className="build-log">{logs.join('\n') || 'In attesa dell’output della compilazione…'}</pre> : null}
       </> : <div className="button-row end"><button className="secondary" disabled={Boolean(busy) || data.backend.checking || data.backend.updating} onClick={() => invoke('backend-check', () => window.launcher.checkBackendUpdate())}>{busy === 'backend-check' || data.backend.checking ? <LoaderCircle className="spin" /> : <RefreshCw />}Check for updates</button>{data.backend.releaseAvailable && data.backend.updateAvailable ? <button className="primary" disabled={Boolean(busy) || data.backend.updating || data.backend.checking} onClick={() => invoke('backend-update', () => window.launcher.updateBackend(), 'The Nexus backend was verified, installed and activated.')}>{busy === 'backend-update' || data.backend.updating ? <LoaderCircle className="spin" /> : <ArrowDownToLine />}{data.backend.available ? 'Update backend' : 'Install backend'}</button> : null}</div>}
     </section>
+
+    {isMac ? <MacEngineCard engine={data.settings.macEngine} status={data.macEngine} /> : null}
 
     <section className="settings-card">
       <div className="settings-heading"><div className="settings-icon"><Gamepad2 /></div><div><h2>Nexus runtime</h2><p>{data.runtime.installed ? `Active: ${runtimeInfo.title} · ${runtimeInfo.version}` : 'No runtime selected'}</p></div><span className={`status-label ${data.runtime.installed && runtimeInfo.source === 'Nexus runtime' ? 'ready' : 'unknown'}`}><StatusDot tone={data.runtime.installed && runtimeInfo.source === 'Nexus runtime' ? 'green' : 'amber'} />{!data.runtime.installed ? 'MISSING' : runtimeInfo.source === 'Nexus runtime' ? 'READY' : 'OTHER RUNTIME'}</span></div>
