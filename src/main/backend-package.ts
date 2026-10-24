@@ -8,6 +8,8 @@ const lockBytes = readFileSync(new URL('../../assets/backend-source.lock.json', 
 export const backendLock = JSON.parse(lockBytes.toString()) as {
   schema: number; version: string; repository: string; commit: string; rust: string;
   cargoLockSha256: string; patchId: string; compatibility: string;
+  /** macOS launch tag; bumped when the macOS backend patch changes so older local builds ask for a rebuild. */
+  macCompatibility: string;
   patches: Array<{ file: string; sha256: string }>;
 };
 export const backendRecipeSha256 = createHash('sha256').update(lockBytes).digest('hex');

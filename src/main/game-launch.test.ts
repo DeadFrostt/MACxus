@@ -31,3 +31,18 @@ describe('generic package launch', () => {
     expect(() => gameLaunchArguments({ path: '/package' }, '/wine', '', LINUX_RUN_PATCH)).toThrow('manifest has no launch executable');
   });
 });
+
+describe('backend compatibility tag', () => {
+  it('keeps the Linux tag and gives macOS its own, so a backend built before the macOS fix asks for a rebuild', async () => {
+    const { backendCompatibility } = await import('./backend.js');
+    const { backendLock } = await import('./backend-package.js');
+    expect(backendCompatibility('linux')).toBe(backendLock.compatibility);
+    expect(backendCompatibility('linux')).toBe('linux-run-v22');
+    expect(backendCompatibility('darwin')).toBe('macos-run-v2');
+    expect(backendLock.patchId).toBe('linux-run-v43');
+    if (process.platform === 'darwin') {
+      expect(LINUX_RUN_PATCH).toBe('macos-run-v2');
+      expect(() => gameLaunchArguments({ path: '/package', executable: 'Game.exe' }, '/wine', '', 'linux-run-v22')).toThrow('current managed Xodus backend');
+    }
+  });
+});

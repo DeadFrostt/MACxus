@@ -3,7 +3,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { BackendManager } from './backend.js';
+import { BackendManager, MAC_BACKEND_BUILD_HINT, buildToolEnvironment } from './backend.js';
 import { backendLock, backendRecipeSha256, backendPackageName, validateBackendManifest, validateBackendArchive } from './backend-package.js';
 import { discoverBackend } from './backend-releases.js';
 import { run } from './process.js';
@@ -106,7 +106,7 @@ describe('prebuilt backend', () => {
       await fs.mkdir(managed);
       const old = '{"previous":"keep intact"}';
       await fs.writeFile(path.join(managed, 'current.json'), old);
-      const manager = new BackendManager(root, '', () => {}, () => scenario === 'busy-after-download' && downloading, fetcher);
+      const manager = new BackendManager(root, '', () => {}, () => scenario === 'busy-after-download' && downloading, fetcher, 'linux');
       if (scenario === 'valid') {
         await manager.update(() => {});
         const pointer = JSON.parse(await fs.readFile(path.join(managed, 'current.json'), 'utf8'));
@@ -128,7 +128,7 @@ describe('prebuilt backend', () => {
 
   it('blocks installation before any download while a game/operation is active', async () => {
     const fetcher = vi.fn() as unknown as typeof fetch;
-    const manager = new BackendManager('/unused', '', () => {}, () => true, fetcher);
+    const manager = new BackendManager('/unused', '', () => {}, () => true, fetcher, 'linux');
     await expect(manager.update(() => {})).rejects.toThrow('while authentication');
     expect(fetcher).not.toHaveBeenCalled();
   });
@@ -137,13 +137,49 @@ describe('prebuilt backend', () => {
     const fetcher = vi.fn(async () => new Response('[]')) as unknown as typeof fetch;
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'backend-absent-test-'));
     try {
-      const manager = new BackendManager(root, '', () => {}, () => false, fetcher);
+      const manager = new BackendManager(root, '', () => {}, () => false, fetcher, 'linux');
       const status = await manager.checkUpdate();
       expect(status.releaseAvailable).toBe(false);
       expect(status.blockReason).toBe('No compatible Nexus backend release has been published yet.');
       await expect(manager.update(() => {})).rejects.toThrow('No compatible');
       await expect(fs.stat(path.join(root, 'xodus-backends/current.json'))).rejects.toThrow();
     } finally { await fs.rm(root, { recursive: true, force: true }); }
+  });
+
+  it('on macOS never offers or installs the Linux prebuilt backend and points to building from source', async () => {
+    const fetcher = vi.fn() as unknown as typeof fetch;
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'backend-mac-test-'));
+    try {
+      const manager = new BackendManager(root, '', () => {}, () => false, fetcher, 'darwin');
+      await manager.refresh();
+      const status = await manager.checkUpdate();
+      expect(fetcher).not.toHaveBeenCalled();
+      expect(status.releaseAvailable).toBe(false);
+      expect(status.updateAvailable).toBe(false);
+      expect(status.blockReason).toBe(MAC_BACKEND_BUILD_HINT);
+      expect(MAC_BACKEND_BUILD_HINT).toContain('Compila il backend');
+      await expect(manager.update(() => {})).rejects.toThrow(MAC_BACKEND_BUILD_HINT);
+      expect(fetcher).not.toHaveBeenCalled();
+      await expect(fs.stat(path.join(root, 'xodus-backends/current.json'))).rejects.toThrow();
+    } finally { await fs.rm(root, { recursive: true, force: true }); }
+  });
+
+  it('adds the user Cargo and Homebrew folders to the Finder PATH on macOS only', () => {
+    const finder = { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOME: '/Users/u' };
+    expect(buildToolEnvironment(finder, 'darwin', '/Users/u').PATH).toBe('/Users/u/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin');
+    expect(buildToolEnvironment({ PATH: '/opt/homebrew/bin:/usr/bin' }, 'darwin', '/Users/u').PATH).toBe('/Users/u/.cargo/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin');
+    expect(buildToolEnvironment({}, 'darwin', '/Users/u').PATH).toBe('/Users/u/.cargo/bin:/opt/homebrew/bin:/usr/local/bin');
+    expect(buildToolEnvironment(finder, 'linux', '/Users/u')).toEqual(finder);
+    expect(finder.PATH).toBe('/usr/bin:/bin:/usr/sbin:/sbin');
+  });
+
+  it('looks for the build tools with the extended PATH on macOS', async () => {
+    vi.mocked(run).mockClear();
+    const manager = new BackendManager('/unused', '', () => {}, () => false, fetch, 'darwin');
+    await manager.refresh();
+    const cargo = vi.mocked(run).mock.calls.find(([cmd]) => cmd === 'cargo');
+    expect(cargo?.[2]?.env?.PATH?.split(':')).toContain(path.join(os.homedir(), '.cargo', 'bin'));
+    expect(cargo?.[2]?.env?.PATH?.split(':')).toContain('/opt/homebrew/bin');
   });
 
   it('rejects wrong source/platform and traversal archive layouts', () => {

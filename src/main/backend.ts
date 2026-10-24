@@ -1,4 +1,5 @@
 import { constants, promises as fs } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { randomUUID, createHash } from 'node:crypto';
 import type { BackendCapabilities, BackendStatus } from '../shared/types.js';
@@ -8,11 +9,29 @@ import { backendLock, backendRecipeSha256, backendAssets, compareVersions } from
 import { discoverBackend, installBackend, type BackendArtifact } from './backend-releases.js';
 
 const REPOSITORY = backendLock.repository;
-export const LINUX_RUN_PATCH = backendLock.compatibility;
+/** Launch-compatibility tag a managed backend must carry. Linux keeps the release tag; macOS has its own. */
+export function backendCompatibility(platform: NodeJS.Platform = process.platform): string {
+  return platform === 'darwin' ? backendLock.macCompatibility : backendLock.compatibility;
+}
+export const LINUX_RUN_PATCH = backendCompatibility();
 const LINUX_RUN_RELEASE = backendLock.patchId;
 const EMPTY_CAPABILITIES: BackendCapabilities = {
   commands: [], account: false, login: false, logout: false, download: false, streaming: false, run: false,
 };
+
+export const MAC_BACKEND_BUILD_HINT = 'Su macOS il backend Nexus si compila dal codice sorgente: in Impostazioni premi «Compila il backend». Servono Git, Rust (Cargo) e protoc.';
+
+/**
+ * Apps opened from Finder get PATH=/usr/bin:/bin:/usr/sbin:/sbin, which lacks
+ * rustup's ~/.cargo/bin and Homebrew. Prepend the usual macOS tool folders
+ * (once each) so the build tools and cargo's own rustc/protoc lookups work.
+ */
+export function buildToolEnvironment(env: NodeJS.ProcessEnv, platform: NodeJS.Platform = process.platform, home = os.homedir()): NodeJS.ProcessEnv {
+  if (platform !== 'darwin') return env;
+  const current = (env.PATH ?? '').split(':').filter(Boolean);
+  const extra = [path.join(home, '.cargo', 'bin'), '/opt/homebrew/bin', '/usr/local/bin'].filter((dir) => !current.includes(dir));
+  return { ...env, PATH: [...extra, ...current].join(':') };
+}
 
 interface ManagedPointer { commit: string; binaryPath: string; builtAt: string; linuxRunPatch?: string; recipeSha256?: string; version?: string; delivery?: 'release' | 'local' }
 
@@ -30,6 +49,7 @@ export class BackendManager {
     emitLog: (scope: string, line: string) => void,
     isOperationActive: () => boolean,
     private readonly fetcher: typeof fetch = fetch,
+    private readonly platform: NodeJS.Platform = process.platform,
   ) {
     this.managedRoot = path.join(userData, 'xodus-backends');
     this.pointerFile = path.join(this.managedRoot, 'current.json');
@@ -51,8 +71,10 @@ export class BackendManager {
 
   setExternalRoot(root: string): void { this.status.externalRoot = root; }
 
+  private toolEnvironment(): NodeJS.ProcessEnv { return buildToolEnvironment(process.env, this.platform); }
+
   private async commandExists(command: string): Promise<boolean> {
-    try { return (await run(command, ['--version'], { maxOutput: 20_000 })).code === 0; } catch { return false; }
+    try { return (await run(command, ['--version'], { maxOutput: 20_000, env: this.toolEnvironment() })).code === 0; } catch { return false; }
   }
 
   private async validate(binaryPath: string): Promise<BackendCapabilities | null> {
@@ -140,6 +162,13 @@ export class BackendManager {
   }
 
   async checkUpdate(): Promise<BackendStatus> {
+    if (this.platform === 'darwin') {
+      // The published prebuilt backend is linux/x64 only; macOS builds from source.
+      this.artifact = undefined;
+      Object.assign(this.status, { releaseAvailable: false, updateAvailable: false, releaseVersion: undefined,
+        blockReason: this.status.available ? undefined : MAC_BACKEND_BUILD_HINT });
+      return this.current;
+    }
     this.status.checking = true;
     try {
       this.artifact = await discoverBackend(this.fetcher);
@@ -161,6 +190,7 @@ export class BackendManager {
   }
 
   async update(onStatus: () => void): Promise<void> {
+    if (this.platform === 'darwin') throw new Error(MAC_BACKEND_BUILD_HINT);
     await this.assertUpdateAllowed();
     if (this.status.updating) throw new Error('A backend installation is already running.');
     this.status.updating = true;
@@ -212,26 +242,27 @@ export class BackendManager {
         if (createHash('sha256').update(await fs.readFile(path.join(backendAssets, patch.file))).digest('hex') !== patch.sha256) throw new Error('Backend patch checksum mismatch.');
       }
       log(`Cloning the pinned Xodus source ${backendLock.commit}…`);
-      let result = await run('git', ['clone', '--no-checkout', REPOSITORY, staging], { onLine: log });
+      const env = this.toolEnvironment();
+      let result = await run('git', ['clone', '--no-checkout', REPOSITORY, staging], { onLine: log, env });
       if (result.code !== 0) throw new Error(`git clone exited with code ${result.code}`);
-      result = await run('git', ['-C', staging, 'checkout', '--detach', backendLock.commit], { onLine: log });
+      result = await run('git', ['-C', staging, 'checkout', '--detach', backendLock.commit], { onLine: log, env });
       if (result.code !== 0) throw new Error('Pinned backend checkout failed.');
-      const commit = (await run('git', ['-C', staging, 'rev-parse', 'HEAD'])).output.trim();
+      const commit = (await run('git', ['-C', staging, 'rev-parse', 'HEAD'], { env })).output.trim();
       if (commit !== backendLock.commit || createHash('sha256').update(await fs.readFile(path.join(staging, 'Cargo.lock'))).digest('hex') !== backendLock.cargoLockSha256) throw new Error('Backend source lock mismatch.');
       for (const patch of backendLock.patches) {
         const patchFile = path.join(staging, `.nexus-${patch.file}`);
         await fs.writeFile(patchFile, await fs.readFile(path.join(backendAssets, patch.file)));
         log(`Applying ${patch.file}…`);
-        result = await run('git', ['-C', staging, 'apply', '--check', patchFile], { onLine: log, maxOutput: 100_000 });
+        result = await run('git', ['-C', staging, 'apply', '--check', patchFile], { onLine: log, maxOutput: 100_000, env });
         if (result.code !== 0) throw new Error(`The pinned backend patch ${patch.file} does not apply; the previous backend remains active.`);
-        result = await run('git', ['-C', staging, 'apply', patchFile], { onLine: log, maxOutput: 100_000 });
+        result = await run('git', ['-C', staging, 'apply', patchFile], { onLine: log, maxOutput: 100_000, env });
         if (result.code !== 0) throw new Error(`Backend patch ${patch.file} could not be applied.`);
       }
       const target = path.join(staging, 'target');
       log(`Building ${commit.slice(0, 10)} with Cargo…`);
       result = await run('cargo', ['build', '--locked', '--release', '--no-default-features', '-p', 'xodus-cli', '-p', 'xodus-service'], {
         cwd: staging,
-        env: { ...process.env, CARGO_TARGET_DIR: target },
+        env: { ...env, CARGO_TARGET_DIR: target },
         onLine: log,
         maxOutput: 5_000_000,
       });
