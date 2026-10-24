@@ -102,7 +102,7 @@ export async function createApfsImage(volumeMount: string, sizeGb: number, deps:
     await exec('hdiutil', ['create', '-size', `${sizeGb}g`, '-type', 'SPARSEBUNDLE', '-fs', 'APFS', '-volname', 'MACxus', image]);
   }
   await record(image);
-  return attachImage(image, exec);
+  return attachImage(image, { exec, exists });
 }
 
 export async function createImageAt(image: string, sizeGb: number, volname: string): Promise<string> {
@@ -110,9 +110,34 @@ export async function createImageAt(image: string, sizeGb: number, volname: stri
   return attachImage(image);
 }
 
-/** Attaches an image without showing it in Finder and returns its mount point. */
-export async function attachImage(image: string, exec: ImageDeps['exec'] = defaultDeps.exec): Promise<string> {
-  const { stdout } = await exec('hdiutil', ['attach', '-nobrowse', '-plist', image], { timeout: 30_000 });
+/** Where the launcher always mounts its APFS image, so the name never drifts to "MACxus 1". */
+export const APFS_MOUNT_POINT = '/Volumes/MACxus';
+
+const unescapeXml = (text: string) => text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+/** Images currently attached, from `hdiutil info -plist` (one entry per attachment). */
+export function attachedImages(hdiutilInfoPlist: string): Array<{ imagePath: string; mountPoints: string[] }> {
+  const parts = hdiutilInfoPlist.split(/<key>image-path<\/key>/).slice(1);
+  return parts.map(part => {
+    const imagePath = /^\s*<string>([^<]*)<\/string>/.exec(part)?.[1] ?? '';
+    return { imagePath: unescapeXml(imagePath), mountPoints: [...part.matchAll(/<key>mount-point<\/key>\s*<string>([^<]+)<\/string>/g)].map(match => unescapeXml(match[1])) };
+  }).filter(entry => entry.imagePath);
+}
+
+/** Attaches an image without showing it in Finder and returns its mount point. Never attaches an image twice. */
+export async function attachImage(image: string, deps: Pick<ImageDeps, 'exec' | 'exists'> = defaultDeps): Promise<string> {
+  const { exec, exists } = deps;
+  const { stdout: info } = await exec('hdiutil', ['info', '-plist']);
+  const attached = attachedImages(info);
+  const existing = attached.find(entry => entry.imagePath === image);
+  if (existing) {
+    if (existing.mountPoints.length) return existing.mountPoints[0];
+    throw new Error('L\'immagine è già collegata ma non montata. Espelli il disco da Utility Disco e riprova.');
+  }
+  if (attached.some(entry => entry.mountPoints.includes(APFS_MOUNT_POINT)) || await exists(APFS_MOUNT_POINT)) {
+    throw new Error(`Il percorso ${APFS_MOUNT_POINT} è già usato da un altro disco. Espelli quel disco e riprova.`);
+  }
+  const { stdout } = await exec('hdiutil', ['attach', '-nobrowse', '-mountpoint', APFS_MOUNT_POINT, '-plist', image], { timeout: 30_000 });
   const points = [...stdout.matchAll(/<key>mount-point<\/key>\s*<string>([^<]+)<\/string>/g)].map(match => match[1]);
   if (!points.length) throw new Error('Immagine creata ma non montata.');
   return points[0];
@@ -129,6 +154,8 @@ export function installRootStatus(root: string, volumes: VolumeInfo[]): 'ok' | '
   const volume = volumeFor(resolved, volumes);
   // Anything under /Volumes lives on its own disk, never on the boot volume.
   if (!volume || volume.mountPoint === '/' && (resolved === '/Volumes' || resolved.startsWith('/Volumes/'))) return 'disconnected';
+  // The image is always mounted at APFS_MOUNT_POINT; "MACxus 1" etc. is a stray second attachment, not the recorded disk.
+  if (/^\/Volumes\/MACxus \d+$/.test(volume.mountPoint)) return 'disconnected';
   return volume.supported ? 'ok' : 'unsupported';
 }
 

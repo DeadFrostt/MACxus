@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createApfsImage, spaceShortfall, enoughSpace, installRootStatus, isSystemVolume, parseDiskutilInfo, volumeSupport, type VolumeInfo } from './storage.js';
+import { attachedImages, attachImage, createApfsImage, spaceShortfall, enoughSpace, installRootStatus, isSystemVolume, parseDiskutilInfo, volumeSupport, type VolumeInfo } from './storage.js';
 
 // Trimmed from `diskutil info -plist` (serials and UUIDs removed).
 const plist = (body: string) => `<?xml version="1.0" encoding="UTF-8"?>
@@ -97,6 +97,14 @@ describe('installRootStatus', () => {
   });
 });
 
+describe('installRootStatus with a drifted image mount', () => {
+  it('refuses a root on "MACxus 1" because the recorded image is mounted at /Volumes/MACxus', () => {
+    const volumes = [vol('/', 'apfs', true), vol('/Volumes/MACxus 1', 'apfs', false)];
+    expect(installRootStatus('/Volumes/MACxus 1/giochi', volumes)).toBe('disconnected');
+    expect(installRootStatus('/Volumes/MACxus/giochi', [...volumes.slice(0, 1), vol('/Volumes/MACxus', 'apfs', false)])).toBe('ok');
+  });
+});
+
 describe('enoughSpace', () => {
   it('keeps a 10% margin for extraction', () => {
     expect(enoughSpace(10e9, 9e9)).toBe(true);
@@ -124,33 +132,96 @@ describe('spaceShortfall', () => {
   });
 });
 
+const IMG = '/Volumes/KINGSTON/MACxus.sparsebundle';
+const infoPlist = (images: Array<{ path: string; mounts: string[] }>) => `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict><key>images</key><array>${images.map((image, index) => `<dict>
+<key>image-path</key><string>${image.path}</string><key>image-type</key><string>sparse bundle disk image</string>
+<key>system-entities</key><array>
+<dict><key>content-hint</key><string>GUID_partition_scheme</string><key>dev-entry</key><string>/dev/disk${index + 8}</string></dict>
+${image.mounts.map(mount => `<dict><key>dev-entry</key><string>/dev/disk${index + 8}s1</string><key>mount-point</key><string>${mount}</string></dict>`).join('\n')}
+</array></dict>`).join('')}</array></dict></plist>`;
+
+describe('attachedImages', () => {
+  it('lists every attachment of the same image with its own mount point', () => {
+    const result = attachedImages(infoPlist([{ path: IMG, mounts: ['/Volumes/MACxus'] }, { path: IMG, mounts: ['/Volumes/MACxus 1'] }]));
+    expect(result).toEqual([{ imagePath: IMG, mountPoints: ['/Volumes/MACxus'] }, { imagePath: IMG, mountPoints: ['/Volumes/MACxus 1'] }]);
+  });
+  it('reports an image without mount point and keeps unrelated images apart', () => {
+    const result = attachedImages(infoPlist([{ path: '/a/b.dmg', mounts: ['/Volumes/B'] }, { path: IMG, mounts: [] }]));
+    expect(result).toEqual([{ imagePath: '/a/b.dmg', mountPoints: ['/Volumes/B'] }, { imagePath: IMG, mountPoints: [] }]);
+  });
+  it('is empty when nothing is attached', () => {
+    expect(attachedImages('<plist><dict><key>images</key><array/></dict></plist>')).toEqual([]);
+    expect(attachedImages('')).toEqual([]);
+  });
+});
+
+describe('attachImage', () => {
+  const run = async (info: string, mountTaken = false) => {
+    const calls: string[][] = [];
+    const exec = async (command: string, args: string[]) => { calls.push([command, ...args]); return { stdout: args[0] === 'info' ? info : '<key>mount-point</key><string>/Volumes/MACxus</string>' }; };
+    const result = await attachImage(IMG, { exec, exists: async () => mountTaken });
+    return { calls, result };
+  };
+  it('skips an image already attached (remount at startup)', async () => {
+    const { calls, result } = await run(infoPlist([{ path: IMG, mounts: ['/Volumes/MACxus'] }]));
+    expect(result).toBe('/Volumes/MACxus');
+    expect(calls.map(c => c[1])).toEqual(['info']);
+  });
+  it('attaches when it is not attached yet', async () => {
+    const { calls } = await run(infoPlist([]));
+    expect(calls.map(c => c[1])).toEqual(['info', 'attach']);
+  });
+});
+
 describe('createApfsImage', () => {
   const MOUNT_PLIST = '<plist><dict><key>system-entities</key><array><dict><key>mount-point</key><string>/Volumes/MACxus</string></dict></array></dict></plist>';
-  const harness = (existing: boolean, failAttach = false) => {
+  const harness = (existing: boolean, failAttach = false, info = '', mountTaken = false) => {
     const calls: string[][] = [];
     const recorded: string[] = [];
     return { calls, recorded, deps: {
-      exists: async () => existing,
+      exists: async (target: string) => target === '/Volumes/MACxus' ? mountTaken : existing,
       record: async (image: string) => { recorded.push(image); },
       exec: async (command: string, args: string[]) => {
         calls.push([command, ...args]);
         if (args[0] === 'attach' && failAttach) throw new Error('attach failed');
-        return { stdout: args[0] === 'attach' ? MOUNT_PLIST : '' };
+        return { stdout: args[0] === 'attach' ? MOUNT_PLIST : args[0] === 'info' ? info : '' };
       },
     } };
   };
   it('creates, records, then attaches a new image', async () => {
     const h = harness(false);
     expect(await createApfsImage('/Volumes/KINGSTON', 50, h.deps)).toBe('/Volumes/MACxus');
-    expect(h.calls.map(c => c[1])).toEqual(['create', 'attach']);
+    expect(h.calls.map(c => c[1])).toEqual(['create', 'info', 'attach']);
     expect(h.calls[0]).toContain('/Volumes/KINGSTON/MACxus.sparsebundle');
     expect(h.recorded).toEqual(['/Volumes/KINGSTON/MACxus.sparsebundle']);
   });
   it('reuses an existing image: no create, only attach and record', async () => {
     const h = harness(true);
     expect(await createApfsImage('/Volumes/KINGSTON', 50, h.deps)).toBe('/Volumes/MACxus');
-    expect(h.calls.map(c => c[1])).toEqual(['attach']);
+    expect(h.calls.map(c => c[1])).toEqual(['info', 'attach']);
     expect(h.recorded).toHaveLength(1);
+  });
+  it('attaches with an explicit stable mount point', async () => {
+    const h = harness(true);
+    await createApfsImage('/Volumes/KINGSTON', 50, h.deps);
+    expect(h.calls.find(c => c[1] === 'attach')).toEqual(['hdiutil', 'attach', '-nobrowse', '-mountpoint', '/Volumes/MACxus', '-plist', '/Volumes/KINGSTON/MACxus.sparsebundle']);
+  });
+  it('does not attach an image that is already attached: reuses its mount point', async () => {
+    const h = harness(true, false, infoPlist([{ path: IMG, mounts: ['/Volumes/MACxus'] }]), true);
+    expect(await createApfsImage('/Volumes/KINGSTON', 50, h.deps)).toBe('/Volumes/MACxus');
+    expect(h.calls.map(c => c[1])).toEqual(['info']);
+    expect(h.recorded).toHaveLength(1);
+  });
+  it('refuses to attach elsewhere when /Volumes/MACxus belongs to another disk', async () => {
+    const h = harness(true, false, infoPlist([{ path: '/Volumes/Other/x.sparsebundle', mounts: ['/Volumes/MACxus'] }]), true);
+    await expect(createApfsImage('/Volumes/KINGSTON', 50, h.deps)).rejects.toThrow('Il percorso /Volumes/MACxus è già usato da un altro disco');
+    expect(h.calls.map(c => c[1])).toEqual(['info']);
+  });
+  it('reports an attached image that has no mount point instead of attaching again', async () => {
+    const h = harness(true, false, infoPlist([{ path: IMG, mounts: [] }]));
+    await expect(createApfsImage('/Volumes/KINGSTON', 50, h.deps)).rejects.toThrow('non montata');
+    expect(h.calls.map(c => c[1])).toEqual(['info']);
   });
   it('records the image even when attach fails, so a retry reuses it', async () => {
     const h = harness(false, true);
