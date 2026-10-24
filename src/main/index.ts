@@ -66,6 +66,9 @@ import { WalletUnlocker } from './keyring-unlock.js';
 import { startSessionKeyring } from './keyring-session.js';
 import { showBeforeAccountCheck } from './launcher-startup.js';
 
+// Electron derives the name (and userData folder) from package.json; the macOS app is MACxus.
+if (process.platform === 'darwin') app.setName('MACxus');
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const downloadNotifications = new DownloadCompletionNotifications({
   isSupported: () => Notification.isSupported(),

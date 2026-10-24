@@ -29,6 +29,13 @@ const url = (name: string) => `https://github.com/domsvoboda/xodus-nexus/release
 const elf = () => { const bytes = Buffer.alloc(64); bytes.set([0x7f, 0x45, 0x4c, 0x46, 2, 1]); bytes.writeUInt16LE(62, 18); return bytes; };
 
 describe('prebuilt backend', () => {
+  it('never validates a cwd-relative binary when externalRoot is empty', async () => {
+    const manager = new BackendManager('/unused', '', () => {}, () => false);
+    const validate = vi.spyOn(manager as unknown as { validate: (p: string) => Promise<unknown> }, 'validate');
+    const status = await manager.refresh();
+    expect(validate.mock.calls.some(([p]) => !path.isAbsolute(p))).toBe(false);
+    expect(status.source).toBe('none');
+  });
   it.each([false, true])('detects structured progress and controls from actual subcommand help: %s', async supported => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-progress-caps-'));
     try {

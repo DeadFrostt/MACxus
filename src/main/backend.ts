@@ -104,7 +104,8 @@ export class BackendManager {
     }
 
     const externalBinary = path.join(this.status.externalRoot, 'target', 'release', 'xodus-cli');
-    const capabilities = await this.validate(externalBinary);
+    // An empty externalRoot would make this a cwd-relative path; never look there.
+    const capabilities = this.status.externalRoot ? await this.validate(externalBinary) : undefined;
     if (capabilities) {
       Object.assign(this.status, {
         available: true, source: 'external', binaryPath: externalBinary,
