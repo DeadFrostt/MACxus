@@ -1,0 +1,255 @@
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { MAC_RUNTIME_DLLS } from './crossover.js';
+import {
+  HIGHBALL_ENGINE_ASSET, HIGHBALL_ENGINE_RELEASE, HIGHBALL_ENGINE_SHA256_ASSET, HIGHBALL_ENGINE_SIZE, HIGHBALL_ENGINE_TAG,
+  highballEngineInstalled, highballWrapperScript, installHighballEngine, prepareHighballRunner, type HighballRelease,
+} from './highball-engine.js';
+
+const temporary: string[] = [];
+async function tmp(): Promise<string> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'nexus-hb-'));
+  temporary.push(dir);
+  return dir;
+}
+afterEach(async () => { await Promise.all(temporary.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))); });
+
+const sha = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
+
+/** Builds a tiny tarball with the real release layout (./engine/...). */
+async function fakeTarball(base: string, complete = true): Promise<Buffer> {
+  const tree = path.join(base, 'tree');
+  await mkdir(path.join(tree, 'engine/bin'), { recursive: true });
+  await mkdir(path.join(tree, 'engine/lib/wine/x86_64-windows'), { recursive: true });
+  await mkdir(path.join(tree, 'frameworks'), { recursive: true });
+  await writeFile(path.join(tree, 'engine/bin/wine'), '#!/bin/sh\necho wine-11.0\n', { mode: 0o755 });
+  await writeFile(path.join(tree, 'engine/bin/wineserver'), '#!/bin/sh\n', { mode: 0o755 });
+  if (complete) await writeFile(path.join(tree, 'engine/lib/wine/x86_64-windows/kernelbase.dll'), 'MZ');
+  const file = path.join(base, 'engine.tar.gz');
+  execFileSync('tar', ['-czf', file, '-C', tree, '.']);
+  return readFile(file);
+}
+
+function release(bytes: Buffer, overrides: Partial<HighballRelease> = {}): HighballRelease {
+  return { ...HIGHBALL_ENGINE_RELEASE, size: bytes.length, sha256: sha(bytes), ...overrides };
+}
+
+function fetcherFor(files: Record<string, Buffer | string>, seen: string[] = []) {
+  return async (url: string) => {
+    seen.push(url);
+    const name = url.slice(url.lastIndexOf('/') + 1);
+    const body = files[name];
+    if (body === undefined) return new Response('missing', { status: 404 });
+    return new Response(typeof body === 'string' ? body : new Uint8Array(body), { status: 200, headers: { 'content-length': String(Buffer.byteLength(body)) } });
+  };
+}
+
+describe('pinned Highball release', () => {
+  it('names the verified tag, assets and size', () => {
+    expect(HIGHBALL_ENGINE_TAG).toBe('engine-wine-11.0-20261014T003801Z-0024-app-packages-0023-spatial-mixer');
+    expect(HIGHBALL_ENGINE_ASSET).toBe(`${HIGHBALL_ENGINE_TAG}.tar.gz`);
+    expect(HIGHBALL_ENGINE_SHA256_ASSET).toBe(`${HIGHBALL_ENGINE_TAG}.tar.gz.sha256`);
+    expect(HIGHBALL_ENGINE_SIZE).toBe(334_884_359);
+    expect(HIGHBALL_ENGINE_RELEASE.baseUrl).toBe(`https://github.com/gauthierpiarrette/highball-engine/releases/download/${HIGHBALL_ENGINE_TAG}`);
+  });
+});
+
+describe('highballEngineInstalled', () => {
+  it('is undefined until wine, wineserver and kernelbase.dll exist', async () => {
+    const data = await tmp();
+    expect(highballEngineInstalled(data)).toBeUndefined();
+    const root = path.join(data, 'engines/highball', HIGHBALL_ENGINE_TAG);
+    await mkdir(path.join(root, 'engine/bin'), { recursive: true });
+    await writeFile(path.join(root, 'engine/bin/wine'), '');
+    await writeFile(path.join(root, 'engine/bin/wineserver'), '');
+    expect(highballEngineInstalled(data)).toBeUndefined();
+    await mkdir(path.join(root, 'engine/lib/wine/x86_64-windows'), { recursive: true });
+    await writeFile(path.join(root, 'engine/lib/wine/x86_64-windows/kernelbase.dll'), '');
+    expect(highballEngineInstalled(data)).toBe(root);
+  });
+});
+
+describe('installHighballEngine', () => {
+  it('downloads, verifies, extracts and atomically installs the engine', async () => {
+    const base = await tmp();
+    const data = path.join(base, 'data');
+    const tarball = await fakeTarball(base);
+    const seen: string[] = [];
+    const progress: number[] = [];
+    const rel = release(tarball);
+    const root = await installHighballEngine(data, fetcherFor({
+      [HIGHBALL_ENGINE_ASSET]: tarball,
+      [HIGHBALL_ENGINE_SHA256_ASSET]: `${sha(tarball)}  ${HIGHBALL_ENGINE_ASSET}\n`,
+    }, seen), (downloaded) => progress.push(downloaded), rel);
+    expect(root).toBe(path.join(data, 'engines/highball', HIGHBALL_ENGINE_TAG));
+    expect(highballEngineInstalled(data, rel)).toBe(root);
+    expect(seen).toContain(`${rel.baseUrl}/${HIGHBALL_ENGINE_ASSET}`);
+    expect(seen).toContain(`${rel.baseUrl}/${HIGHBALL_ENGINE_SHA256_ASSET}`);
+    expect(progress.at(-1)).toBe(tarball.length);
+    expect(await readdir(path.join(data, 'engines/highball'))).toEqual([HIGHBALL_ENGINE_TAG]);
+  });
+
+  it('rejects a tarball whose sha256 differs from the published .sha256 and installs nothing', async () => {
+    const base = await tmp();
+    const data = path.join(base, 'data');
+    const tarball = await fakeTarball(base);
+    const wrong = 'a'.repeat(64);
+    await expect(installHighballEngine(data, fetcherFor({
+      [HIGHBALL_ENGINE_ASSET]: tarball,
+      [HIGHBALL_ENGINE_SHA256_ASSET]: `${wrong}  ${HIGHBALL_ENGINE_ASSET}\n`,
+    }), undefined, release(tarball, { sha256: wrong }))).rejects.toThrow(/SHA-256/);
+    expect(highballEngineInstalled(data)).toBeUndefined();
+    expect(await readdir(path.join(data, 'engines/highball')).catch(() => [])).toEqual([]);
+  });
+
+  it('rejects a published checksum that differs from the pinned one', async () => {
+    const base = await tmp();
+    const tarball = await fakeTarball(base);
+    await expect(installHighballEngine(path.join(base, 'data'), fetcherFor({
+      [HIGHBALL_ENGINE_ASSET]: tarball,
+      [HIGHBALL_ENGINE_SHA256_ASSET]: `${'b'.repeat(64)}  ${HIGHBALL_ENGINE_ASSET}\n`,
+    }), undefined, release(tarball))).rejects.toThrow(/checksum/i);
+  });
+
+  it('rejects an unexpected size before extracting', async () => {
+    const base = await tmp();
+    const data = path.join(base, 'data');
+    const tarball = await fakeTarball(base);
+    await expect(installHighballEngine(data, fetcherFor({
+      [HIGHBALL_ENGINE_ASSET]: tarball,
+      [HIGHBALL_ENGINE_SHA256_ASSET]: `${sha(tarball)}  x\n`,
+    }), undefined, release(tarball, { size: tarball.length + 1 }))).rejects.toThrow(/dimensione/i);
+    expect(highballEngineInstalled(data)).toBeUndefined();
+  });
+
+  it('reports an HTTP failure in Italian', async () => {
+    const base = await tmp();
+    await expect(installHighballEngine(path.join(base, 'data'), fetcherFor({}), undefined, release(Buffer.from('x'))))
+      .rejects.toThrow(/Download del motore Highball non riuscito/);
+  });
+
+  it('rejects an archive without the expected engine layout', async () => {
+    const base = await tmp();
+    const data = path.join(base, 'data');
+    const tarball = await fakeTarball(base, false);
+    await expect(installHighballEngine(data, fetcherFor({
+      [HIGHBALL_ENGINE_ASSET]: tarball,
+      [HIGHBALL_ENGINE_SHA256_ASSET]: `${sha(tarball)}  x\n`,
+    }), undefined, release(tarball))).rejects.toThrow(/incompleto/);
+    expect(highballEngineInstalled(data)).toBeUndefined();
+  });
+
+  it('returns the existing install without downloading again', async () => {
+    const base = await tmp();
+    const data = path.join(base, 'data');
+    const tarball = await fakeTarball(base);
+    const files = { [HIGHBALL_ENGINE_ASSET]: tarball, [HIGHBALL_ENGINE_SHA256_ASSET]: `${sha(tarball)}  x\n` };
+    await installHighballEngine(data, fetcherFor(files), undefined, release(tarball));
+    const seen: string[] = [];
+    await installHighballEngine(data, fetcherFor(files, seen), undefined, release(tarball));
+    expect(seen).toEqual([]);
+  });
+});
+
+describe('highballWrapperScript', () => {
+  const script = highballWrapperScript('/Data Root/engine root', '/Apps/Cross Over/apple_gptk', "/b/xbox-highball's", { D3DM_VENDOR_ID: '0x10de', D3DM_DEVICE_DESCRIPTION: 'NVIDIA GeForce RTX 4070' });
+
+  it('exports the prefix and the D3DMetal wiring with shell quoting', () => {
+    expect(script.startsWith('#!/bin/sh\n')).toBe(true);
+    expect(script).toContain(`export WINEPREFIX='/b/xbox-highball'"'"'s'`);
+    expect(script).toContain("export WINEDLLPATH_PREPEND='/Apps/Cross Over/apple_gptk/wine'");
+    expect(script).toContain("export CX_D3DMETALPATH='/Apps/Cross Over/apple_gptk/external'");
+    expect(script).toContain(`export DYLD_FALLBACK_LIBRARY_PATH='/Apps/Cross Over/apple_gptk/external'"\${DYLD_FALLBACK_LIBRARY_PATH:+:\$DYLD_FALLBACK_LIBRARY_PATH}"`);
+    expect(script).toContain(`export DYLD_FALLBACK_FRAMEWORK_PATH='/Apps/Cross Over/apple_gptk/external'"\${DYLD_FALLBACK_FRAMEWORK_PATH:+:\$DYLD_FALLBACK_FRAMEWORK_PATH}"`);
+  });
+
+  it('defaults msync on and esync off unless already set, and adds profile env the same way', () => {
+    expect(script).toContain(`export WINEMSYNC="\${WINEMSYNC:-1}"`);
+    expect(script).toContain(`export WINEESYNC="\${WINEESYNC:-0}"`);
+    expect(script).toContain(`export D3DM_VENDOR_ID="\${D3DM_VENDOR_ID:-0x10de}"`);
+    expect(script).toContain(`export D3DM_DEVICE_DESCRIPTION="\${D3DM_DEVICE_DESCRIPTION:-NVIDIA GeForce RTX 4070}"`);
+  });
+
+  it('launches with the engine wine, waits on wineserver and has a stop branch', () => {
+    expect(script).toContain('if [ "${1:-}" = "--nexus-stop-prefix" ]; then');
+    expect(script).toContain("  exec '/Data Root/engine root/engine/bin/wineserver' -k");
+    expect(script).toContain(`'/Data Root/engine root/engine/bin/wine' "$@" || launch_status=$?`);
+    expect(script).toContain(`'/Data Root/engine root/engine/bin/wineserver' -w || wait_status=$?`);
+    expect(script).toContain('if [ "$launch_status" -ne 0 ]; then exit "$launch_status"; fi');
+    expect(script.indexOf('--nexus-stop-prefix')).toBeGreaterThan(script.indexOf('WINEPREFIX'));
+  });
+
+  it('ignores env keys that are not valid shell names and values outside the safe set', () => {
+    const unsafe = highballWrapperScript('/e', '/g', '/p', { 'A;rm -rf /': 'x', SAFE_KEY: '$(touch /tmp/x)', QUOTE: 'a"b' });
+    expect(unsafe).not.toContain('rm -rf');
+    expect(unsafe).not.toContain('touch');
+    expect(unsafe).not.toContain('QUOTE');
+  });
+});
+
+const MARKER = Buffer.from('Wine builtin DLL');
+function dll(): Buffer { const bytes = Buffer.alloc(128, 0x41); MARKER.copy(bytes, 64); return bytes; }
+
+async function fakeEngine(base: string, log: string): Promise<string> {
+  const root = path.join(base, 'engine root');
+  await mkdir(path.join(root, 'engine/bin'), { recursive: true });
+  // The fake wineboot creates system.reg the way wineserver does when it flushes the registry.
+  await writeFile(path.join(root, 'engine/bin/wine'), `#!/bin/sh\necho "wine $* PREFIX=$WINEPREFIX" >> '${log}'\nif [ "$1" = "wineboot" ]; then mkdir -p "$WINEPREFIX/drive_c/windows/system32"; : > "$WINEPREFIX/system.reg"; fi\n`, { mode: 0o755 });
+  await writeFile(path.join(root, 'engine/bin/wineserver'), `#!/bin/sh\necho "wineserver $*" >> '${log}'\n`, { mode: 0o755 });
+  return root;
+}
+
+describe('prepareHighballRunner', () => {
+  it('creates the separate prefix once, installs stripped DLLs, sets overrides and writes the wrapper', async () => {
+    const base = await tmp();
+    const log = path.join(base, 'log');
+    const engine = await fakeEngine(base, log);
+    const bottles = path.join(base, 'bottles');
+    const runtime = path.join(base, 'runtime');
+    await mkdir(runtime);
+    for (const name of MAC_RUNTIME_DLLS) await writeFile(path.join(runtime, name), dll());
+
+    const first = await prepareHighballRunner(engine, '/gptk', bottles, runtime, { D3DM_VENDOR_ID: '0x10de' });
+    const second = await prepareHighballRunner(engine, '/gptk', bottles, runtime, { D3DM_VENDOR_ID: '0x10de' });
+
+    const prefix = path.join(bottles, 'xbox-highball');
+    const calls = (await readFile(log, 'utf8')).split('\n').filter(Boolean);
+    expect(calls.filter((line) => line.startsWith('wine wineboot -u'))).toHaveLength(1);
+    expect(calls.find((line) => line.startsWith('wine wineboot'))).toContain(`PREFIX=${prefix}`);
+    const regAdds = calls.filter((line) => line.includes('reg add'));
+    expect(regAdds).toHaveLength(MAC_RUNTIME_DLLS.length);
+    expect(regAdds[0]).toContain('native,builtin');
+    expect(regAdds[0]).toContain(`PREFIX=${prefix}`);
+    expect(regAdds[0]).not.toContain('--bottle');
+    for (const name of MAC_RUNTIME_DLLS) {
+      const copied = await readFile(path.join(prefix, 'drive_c/windows/system32', name));
+      expect(copied.subarray(64, 80).equals(Buffer.alloc(16))).toBe(true);
+    }
+    expect((await readFile(path.join(prefix, '.macxus-overrides'), 'utf8')).trim().split('\n')).toEqual([...MAC_RUNTIME_DLLS].sort());
+    expect(first).toEqual(second);
+    expect(first.command).toBe(path.join(bottles, 'xodus-highball-wine'));
+    expect(first.compatibilityDataPath).toBe(prefix);
+    expect(first.stopPrefix).toEqual({ command: first.command, args: ['--nexus-stop-prefix'] });
+    expect((await stat(first.command)).mode & 0o777).toBe(0o700);
+    const wrapper = await readFile(first.command, 'utf8');
+    expect(wrapper).toContain("CX_D3DMETALPATH='/gptk/external'");
+    expect(wrapper).toContain('D3DM_VENDOR_ID');
+    // The CrossOver bottle is never touched.
+    await expect(stat(path.join(bottles, 'xbox'))).rejects.toThrow();
+  }, 30_000);
+
+  it('reports a prefix that wineboot did not create', async () => {
+    const base = await tmp();
+    const log = path.join(base, 'log');
+    const engine = await fakeEngine(base, log);
+    await writeFile(path.join(engine, 'engine/bin/wine'), `#!/bin/sh\necho "boom"\nexit 3\n`, { mode: 0o755 });
+    const runtime = path.join(base, 'runtime');
+    await mkdir(runtime);
+    for (const name of MAC_RUNTIME_DLLS) await writeFile(path.join(runtime, name), dll());
+    await expect(prepareHighballRunner(engine, '/gptk', path.join(base, 'bottles'), runtime, {})).rejects.toThrow(/prefisso Highball/);
+  }, 30_000);
+});

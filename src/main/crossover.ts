@@ -1,7 +1,7 @@
 import { constants, promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { run } from './process.js';
+import { run, type RunResult } from './process.js';
 import type { ProtonRunner } from './proton.js';
 
 export const MAC_RUNTIME_DLLS = ['xgameruntime.dll', 'windows.web.dll', 'twinapi.appcore.dll', 'gamingtcui.dll'] as const;
@@ -19,7 +19,7 @@ type Graphics = 'd3dmetal' | 'dxmt' | 'wined3d';
 const BOTTLE = 'xbox';
 const BUILTIN_MARKER = Buffer.from('Wine builtin DLL');
 
-function shellQuote(value: string): string {
+export function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
@@ -73,6 +73,57 @@ export function crossOverWrapperScript(cx: CrossOverInstall, bottlesRoot: string
   ].join('\n');
 }
 
+/** Copies the runtime DLLs into the prefix's system32 as native DLLs; returns the names that changed. */
+export async function installRuntimeDlls(prefix: string, runtimeDllDir: string): Promise<string[]> {
+  const system32 = path.join(prefix, 'drive_c', 'windows', 'system32');
+  await fs.mkdir(system32, { recursive: true });
+  const changed: string[] = [];
+  for (const name of MAC_RUNTIME_DLLS) {
+    const stripped = stripBuiltinMarker(await fs.readFile(path.join(runtimeDllDir, name)));
+    const target = path.join(system32, name);
+    let current: Buffer | undefined;
+    try { current = await fs.readFile(target); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    if (current?.equals(stripped)) continue;
+    const temporary = `${target}.nexus-${process.pid}`;
+    try {
+      await fs.writeFile(temporary, stripped, { mode: 0o644 });
+      await fs.rename(temporary, target);
+    } finally { await fs.unlink(temporary).catch(() => undefined); }
+    changed.push(name);
+  }
+  return changed;
+}
+
+/** `reg add` arguments that make Wine prefer the native copy of a runtime DLL. */
+export function dllOverrideArgs(name: string): string[] {
+  return ['reg', 'add', 'HKCU\\Software\\Wine\\DllOverrides', '/v', name.replace(/\.dll$/i, ''), '/t', 'REG_SZ', '/d', 'native,builtin', '/f'];
+}
+
+/**
+ * Sets the native,builtin overrides when the prefix is new, a DLL changed or the
+ * marker file is missing/stale; the marker is written only after every override succeeded.
+ */
+export async function ensureRuntimeOverrides(prefix: string, force: boolean, regAdd: (name: string) => Promise<RunResult>, label: string): Promise<void> {
+  const markerPath = path.join(prefix, '.macxus-overrides');
+  const markerContent = [...MAC_RUNTIME_DLLS].sort().join('\n') + '\n';
+  let confirmed = false;
+  try { confirmed = (await fs.readFile(markerPath, 'utf8')) === markerContent; } catch { /* not confirmed yet */ }
+  if (!force && confirmed) return;
+  for (const name of MAC_RUNTIME_DLLS) {
+    const result = await regAdd(name);
+    if (result.code !== 0) throw new Error(`Could not set the ${name} override in the ${label} (code ${result.code})`);
+  }
+  await fs.writeFile(markerPath, markerContent);
+}
+
+/** Atomically writes a 0700 wrapper script. */
+export async function writeRunnerScript(runner: string, content: string): Promise<void> {
+  const temporary = `${runner}.tmp-${process.pid}`;
+  await fs.writeFile(temporary, content, { mode: 0o700 });
+  await fs.rename(temporary, runner);
+  await fs.chmod(runner, 0o700);
+}
+
 export async function prepareCrossOverRunner(
   cx: CrossOverInstall,
   bottlesRoot: string,
@@ -92,39 +143,11 @@ export async function prepareCrossOverRunner(
     }
   }
 
-  const system32 = path.join(bottlePath, 'drive_c', 'windows', 'system32');
-  await fs.mkdir(system32, { recursive: true });
-  const changed: string[] = [];
-  for (const name of MAC_RUNTIME_DLLS) {
-    const stripped = stripBuiltinMarker(await fs.readFile(path.join(runtimeDllDir, name)));
-    const target = path.join(system32, name);
-    let current: Buffer | undefined;
-    try { current = await fs.readFile(target); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
-    if (current?.equals(stripped)) continue;
-    const temporary = `${target}.nexus-${process.pid}`;
-    try {
-      await fs.writeFile(temporary, stripped, { mode: 0o644 });
-      await fs.rename(temporary, target);
-    } finally { await fs.unlink(temporary).catch(() => undefined); }
-    changed.push(name);
-  }
-
-  const markerPath = path.join(bottlePath, '.macxus-overrides');
-  const markerContent = [...MAC_RUNTIME_DLLS].sort().join('\n') + '\n';
-  let confirmed = false;
-  try { confirmed = (await fs.readFile(markerPath, 'utf8')) === markerContent; } catch { /* not confirmed yet */ }
-  if (!existed || changed.length > 0 || !confirmed) {
-    for (const name of MAC_RUNTIME_DLLS) {
-      const result = await run(cx.wine, ['--bottle', BOTTLE, 'reg', 'add', 'HKCU\\Software\\Wine\\DllOverrides', '/v', name.replace(/\.dll$/i, ''), '/t', 'REG_SZ', '/d', 'native,builtin', '/f'], { env });
-      if (result.code !== 0) throw new Error(`Could not set the ${name} override in the CrossOver bottle (code ${result.code})`);
-    }
-    await fs.writeFile(markerPath, markerContent);
-  }
+  const changed = await installRuntimeDlls(bottlePath, runtimeDllDir);
+  await ensureRuntimeOverrides(bottlePath, !existed || changed.length > 0, (name) =>
+    run(cx.wine, ['--bottle', BOTTLE, ...dllOverrideArgs(name)], { env }), 'CrossOver bottle');
 
   const runner = path.join(bottlesRoot, 'xodus-crossover-wine');
-  const temporary = `${runner}.tmp-${process.pid}`;
-  await fs.writeFile(temporary, crossOverWrapperScript(cx, bottlesRoot, BOTTLE, graphics), { mode: 0o700 });
-  await fs.rename(temporary, runner);
-  await fs.chmod(runner, 0o700);
+  await writeRunnerScript(runner, crossOverWrapperScript(cx, bottlesRoot, BOTTLE, graphics));
   return { command: runner, compatibilityDataPath: bottlePath, stopPrefix: { command: runner, args: ['--nexus-stop-prefix'] } };
 }
