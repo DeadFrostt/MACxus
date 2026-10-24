@@ -186,6 +186,8 @@ export interface Settings {
 export interface VolumeInfo {
   mountPoint: string; name: string; fsType: string; internal: boolean;
   freeBytes: number; totalBytes: number; supported: boolean; reason?: string;
+  /** Unsupported volumes only: MACxus.sparsebundle already exists there. */
+  hasImage?: boolean;
 }
 
 export interface LauncherUpdate {

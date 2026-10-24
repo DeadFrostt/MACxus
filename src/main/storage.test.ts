@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { enoughSpace, installRootStatus, isSystemVolume, parseDiskutilInfo, volumeSupport, type VolumeInfo } from './storage.js';
+import { createApfsImage, spaceShortfall, enoughSpace, installRootStatus, isSystemVolume, parseDiskutilInfo, volumeSupport, type VolumeInfo } from './storage.js';
 
 // Trimmed from `diskutil info -plist` (serials and UUIDs removed).
 const plist = (body: string) => `<?xml version="1.0" encoding="UTF-8"?>
@@ -110,5 +110,55 @@ describe('isSystemVolume', () => {
     expect(isSystemVolume({ mountPoint: '/Library/Developer/CoreSimulator/Volumes/iOS_23A', name: 'iOS 26', internal: false })).toBe(true);
     expect(isSystemVolume({ mountPoint: '/', name: 'Macintosh HD', internal: true })).toBe(false);
     expect(isSystemVolume({ mountPoint: '/Volumes/KINGSTON', name: 'KINGSTON', internal: false })).toBe(false);
+  });
+});
+
+describe('spaceShortfall', () => {
+  it('is undefined when the remaining download fits with margin', () => {
+    expect(spaceShortfall(10e9, 9e9, 0)).toBeUndefined();
+    expect(spaceShortfall(10e9, 20e9, 11e9)).toBeUndefined();
+  });
+  it('returns the missing bytes otherwise', () => {
+    expect(spaceShortfall(10e9, 9.5e9, 0)).toBe(Math.ceil(9.5e9 * 1.1 - 10e9));
+    expect(spaceShortfall(0, 1e9, 1e9)).toBeUndefined();
+  });
+});
+
+describe('createApfsImage', () => {
+  const MOUNT_PLIST = '<plist><dict><key>system-entities</key><array><dict><key>mount-point</key><string>/Volumes/MACxus</string></dict></array></dict></plist>';
+  const harness = (existing: boolean, failAttach = false) => {
+    const calls: string[][] = [];
+    const recorded: string[] = [];
+    return { calls, recorded, deps: {
+      exists: async () => existing,
+      record: async (image: string) => { recorded.push(image); },
+      exec: async (command: string, args: string[]) => {
+        calls.push([command, ...args]);
+        if (args[0] === 'attach' && failAttach) throw new Error('attach failed');
+        return { stdout: args[0] === 'attach' ? MOUNT_PLIST : '' };
+      },
+    } };
+  };
+  it('creates, records, then attaches a new image', async () => {
+    const h = harness(false);
+    expect(await createApfsImage('/Volumes/KINGSTON', 50, h.deps)).toBe('/Volumes/MACxus');
+    expect(h.calls.map(c => c[1])).toEqual(['create', 'attach']);
+    expect(h.calls[0]).toContain('/Volumes/KINGSTON/MACxus.sparsebundle');
+    expect(h.recorded).toEqual(['/Volumes/KINGSTON/MACxus.sparsebundle']);
+  });
+  it('reuses an existing image: no create, only attach and record', async () => {
+    const h = harness(true);
+    expect(await createApfsImage('/Volumes/KINGSTON', 50, h.deps)).toBe('/Volumes/MACxus');
+    expect(h.calls.map(c => c[1])).toEqual(['attach']);
+    expect(h.recorded).toHaveLength(1);
+  });
+  it('records the image even when attach fails, so a retry reuses it', async () => {
+    const h = harness(false, true);
+    await expect(createApfsImage('/Volumes/KINGSTON', 50, h.deps)).rejects.toThrow('attach failed');
+    expect(h.recorded).toHaveLength(1);
+  });
+  it('rejects an invalid size only when it must create', async () => {
+    await expect(createApfsImage('/Volumes/K', 0, harness(false).deps)).rejects.toThrow();
+    await expect(createApfsImage('/Volumes/K', 0, harness(true).deps)).resolves.toBe('/Volumes/MACxus');
   });
 });

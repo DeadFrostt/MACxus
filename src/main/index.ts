@@ -12,7 +12,7 @@ import { DownloadBandwidthControls, isBandwidthOnlyPatch } from './download-band
 import { demoAccountLibrary, demoAccountProducts, demoDownloads, demoGames, demoLaunchOptions, demoLocales, demoSnapshot, type DemoArtwork } from '../shared/demo-data.js';
 import { backendLock } from './backend-package.js';
 import { BackendManager } from './backend.js';
-import { attachImage, createApfsImage, enoughSpace, installRootStatus, listVolumes, type VolumeInfo } from './storage.js';
+import { attachImage, createApfsImage, enoughSpace, installRootStatus, listVolumes, spaceShortfall, volumeFor, type VolumeInfo } from './storage.js';
 import { run, spawnTracked } from './process.js';
 import { inspectGameDirectory, StateStore } from './store.js';
 import { RuntimeManager } from './runtime.js';
@@ -236,9 +236,9 @@ function watchVolumes(): void {
 }
 /** Re-attaches the APFS images the user created, so games on external disks are ready at launch. */
 async function remountApfsImages(): Promise<void> {
-  for (const image of store.settings.apfsImages ?? []) {
+  await Promise.all((store.settings.apfsImages ?? []).map(async image => {
     try { await fs.access(image); await attachImage(image); } catch { /* Disk not connected; its games show "Disco non collegato". */ }
-  }
+  }));
 }
 async function assertStorageForInstall(destination: string, downloadBytes?: number): Promise<void> {
   if (process.platform !== 'darwin') return;
@@ -639,6 +639,20 @@ async function runDownload(task: DownloadTask, binary: string, market: string, u
   args.push(...downloadLimitArgs(store.settings.downloadLimitMiB, backend.current.capabilities));
   const progressTracker = new DownloadProgress();
   let lastLoggedPercent = -1;
+  let spaceChecked = false;
+  let spaceFailure: string | undefined;
+  let spaceChild: { kill(signal: NodeJS.Signals): boolean } | undefined;
+  /** Once the real size is known, stop early (keeping partial files) if the disk cannot hold the rest. */
+  const checkSpace = async (): Promise<void> => {
+    try {
+      const volume = volumeFor(destination, await refreshVolumes());
+      const missing = volume && task.totalBytes ? spaceShortfall(volume.freeBytes, task.totalBytes, task.downloadedBytes ?? 0) : undefined;
+      if (missing === undefined || !volume) return;
+      const needed = ((task.totalBytes! - (task.downloadedBytes ?? 0)) * 1.1) / 1e9;
+      spaceFailure = `Spazio insufficiente sul disco scelto: servono circa ${needed.toFixed(1)} GB, ne restano ${(volume.freeBytes / 1e9).toFixed(1)} GB. Libera spazio o scegli un altro disco e riprova; i file già scaricati sono stati conservati.`;
+      spaceChild?.kill('SIGINT');
+    } catch { /* The check is advisory; the download continues if volumes cannot be read. */ }
+  };
   let pending: { paused: boolean; resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> } | undefined;
   if (shutdownStarted) throw Error('The launcher is closing.');
   const tracked = spawnTracked(binary, args, {
@@ -646,6 +660,7 @@ async function runDownload(task: DownloadTask, binary: string, market: string, u
       const progress = structured ? progressTracker.update(line) : undefined;
       if (progress) {
           Object.assign(task, progress);
+          if (process.platform === 'darwin' && !spaceChecked && task.totalBytes) { spaceChecked = true; void checkSpace(); }
           task.canPause = controllable && progress.canPause;
           if (pending) {
             task.controlPending = true;
@@ -674,6 +689,7 @@ async function runDownload(task: DownloadTask, binary: string, market: string, u
     if (pending) { clearTimeout(pending.timer); pending.reject(error); pending = undefined; }
     task.controlPending = false; scheduleSnapshot();
   });
+  spaceChild = tracked.child;
   operations.set(id, tracked.child);
   if (backend.current.capabilities.streamingBandwidthLimit) downloadLimitControls.attach(id, tracked.child.stdin);
   if (controllable) downloadControls.set(id, paused => new Promise<void>((resolve, reject) => {
@@ -696,6 +712,7 @@ async function runDownload(task: DownloadTask, binary: string, market: string, u
   await tracked.result.then(async (result) => {
     finishControls();
     const cancelled = cancelledDownloads.delete(id);
+    const cancelledByUser = cancelled;
     task.exitCode = result.code;
     task.finishedAt = new Date().toISOString();
     task.status = cancelled || result.code === 130 ? 'cancelled' : result.code === 0 && (!structured || progressTracker.terminal === 'complete') ? 'complete' : 'failed';
@@ -703,7 +720,8 @@ async function runDownload(task: DownloadTask, binary: string, market: string, u
     if (shutdownStarted && controllable && !cancelled && task.status !== 'complete') task.status = 'paused';
     task.progress = task.status === 'complete' ? 100 : task.progress;
     task.phase = task.status === 'complete' ? updateGame ? 'Update complete' : 'Installation complete' : task.status === 'cancelled' ? 'Cancelled by user' : structured && result.code === 0 ? 'The backend did not confirm a completed installation.' : `Xodus exited with code ${result.code}`;
-    if (task.status === 'failed') task.error = downloadFailure(task.log, result.code);
+    if (spaceFailure && !cancelledByUser) { task.status = 'failed'; task.phase = 'Spazio insufficiente sul disco'; task.error = spaceFailure; }
+    else if (task.status === 'failed') task.error = downloadFailure(task.log, result.code);
     if (task.status === 'paused') {
       task.phase = 'Paused — resume to restore saved download checkpoints';
       task.canPause = true; task.error = undefined; task.finishedAt = undefined;
@@ -1657,11 +1675,13 @@ function registerIpc(): void {
   ipcMain.handle('create-apfs-image', async (_event, volumeMount: string, sizeGb: number) => {
     if (process.platform !== 'darwin') throw Error('Le immagini APFS sono disponibili solo su macOS.');
     const volumes = await refreshVolumes();
-    if (typeof volumeMount !== 'string' || !volumes.some(volume => volume.mountPoint === volumeMount)) throw Error('Disco non trovato.');
-    const mountPoint = await createApfsImage(volumeMount, sizeGb);
-    const image = path.join(volumeMount, 'MACxus.sparsebundle');
-    const images = store.settings.apfsImages ?? [];
-    if (!images.includes(image)) await store.setSettings({ apfsImages: [...images, image] });
+    const volume = typeof volumeMount === 'string' ? volumes.find(entry => entry.mountPoint === volumeMount) : undefined;
+    if (!volume) throw Error('Disco non trovato.');
+    if (volume.supported) throw Error('Questo disco supporta già i giochi: non serve un\'immagine APFS.');
+    const mountPoint = await createApfsImage(volumeMount, sizeGb, { record: async image => {
+      const images = store.settings.apfsImages ?? [];
+      if (!images.includes(image)) await store.setSettings({ apfsImages: [...images, image] });
+    } });
     await refreshVolumes();
     return mountPoint;
   });
@@ -1922,9 +1942,10 @@ app.whenReady().then(async () => {
   void enrichDownloadCovers(store.downloads, currentMarket()).catch(() => { /* Covers are optional. */ });
   if (process.platform !== 'darwin') void checkLauncherUpdate().then(() => emitSnapshot());
   if (process.platform === 'darwin') {
-    await remountApfsImages();
     await refreshVolumes().catch(() => { /* Volume status is optional. */ });
     watchVolumes();
+    // Remount in the background (30 s limit per image) so a slow disk never delays startup.
+    void remountApfsImages().then(() => refreshVolumes()).catch(() => { /* Games on that disk show "Disco non collegato". */ });
   }
   registerIpc();
   launchReady = true;

@@ -66,7 +66,11 @@ async function diskutilInfo(mount: string): Promise<VolumeInfo | undefined> {
 export async function listVolumes(): Promise<VolumeInfo[]> {
   let entries: string[] = [];
   try { entries = await fs.readdir('/Volumes'); } catch { /* No external volumes. */ }
-  const found = await Promise.all(['/', ...entries.map(entry => path.join('/Volumes', entry))].map(diskutilInfo));
+  const found = await Promise.all(['/', ...entries.map(entry => path.join('/Volumes', entry))].map(async mount => {
+    const info = await diskutilInfo(mount);
+    if (info && !info.supported) info.hasImage = await defaultDeps.exists(path.join(info.mountPoint, APFS_IMAGE_NAME));
+    return info;
+  }));
   const seen = new Set<string>();
   return found.filter((volume): volume is VolumeInfo => {
     if (!volume || seen.has(volume.mountPoint)) return false; // /Volumes/<boot disk> is a symlink to /.
@@ -75,29 +79,54 @@ export async function listVolumes(): Promise<VolumeInfo[]> {
   });
 }
 
-export async function createApfsImage(volumeMount: string, sizeGb: number): Promise<string> {
-  if (!Number.isInteger(sizeGb) || sizeGb < 1 || sizeGb > 16_384) throw new Error('Dimensione immagine non valida.');
-  const image = path.join(volumeMount, 'MACxus.sparsebundle');
-  return createImageAt(image, sizeGb, 'MACxus');
+export const APFS_IMAGE_NAME = 'MACxus.sparsebundle';
+
+export interface ImageDeps {
+  exec: (command: string, args: string[], options?: { timeout?: number }) => Promise<{ stdout: string }>;
+  exists: (target: string) => Promise<boolean>;
+  /** Called with the image path as soon as it exists, before attaching, so a failed attach never orphans it. */
+  record: (image: string) => Promise<void>;
+}
+const defaultDeps: ImageDeps = {
+  exec: (command, args, options) => execFileAsync(command, args, { maxBuffer: 2_000_000, ...options }),
+  exists: async target => { try { await fs.access(target); return true; } catch { return false; } },
+  record: async () => {},
+};
+
+/** Creates MACxus.sparsebundle on the volume, or reuses (re-attaches) the one already there. */
+export async function createApfsImage(volumeMount: string, sizeGb: number, deps: Partial<ImageDeps> = {}): Promise<string> {
+  const { exec, exists, record } = { ...defaultDeps, ...deps };
+  const image = path.join(volumeMount, APFS_IMAGE_NAME);
+  if (!await exists(image)) {
+    if (!Number.isInteger(sizeGb) || sizeGb < 1 || sizeGb > 16_384) throw new Error('Dimensione immagine non valida.');
+    await exec('hdiutil', ['create', '-size', `${sizeGb}g`, '-type', 'SPARSEBUNDLE', '-fs', 'APFS', '-volname', 'MACxus', image]);
+  }
+  await record(image);
+  return attachImage(image, exec);
 }
 
 export async function createImageAt(image: string, sizeGb: number, volname: string): Promise<string> {
-  await execFileAsync('hdiutil', ['create', '-size', `${sizeGb}g`, '-type', 'SPARSEBUNDLE', '-fs', 'APFS', '-volname', volname, image]);
+  await defaultDeps.exec('hdiutil', ['create', '-size', `${sizeGb}g`, '-type', 'SPARSEBUNDLE', '-fs', 'APFS', '-volname', volname, image]);
   return attachImage(image);
 }
 
 /** Attaches an image without showing it in Finder and returns its mount point. */
-export async function attachImage(image: string): Promise<string> {
-  const { stdout } = await execFileAsync('hdiutil', ['attach', '-nobrowse', '-plist', image], { maxBuffer: 2_000_000 });
+export async function attachImage(image: string, exec: ImageDeps['exec'] = defaultDeps.exec): Promise<string> {
+  const { stdout } = await exec('hdiutil', ['attach', '-nobrowse', '-plist', image], { timeout: 30_000 });
   const points = [...stdout.matchAll(/<key>mount-point<\/key>\s*<string>([^<]+)<\/string>/g)].map(match => match[1]);
   if (!points.length) throw new Error('Immagine creata ma non montata.');
   return points[0];
 }
 
+export function volumeFor(target: string, volumes: VolumeInfo[]): VolumeInfo | undefined {
+  const resolved = path.resolve(target);
+  const within = (mount: string) => mount === '/' || resolved === mount || resolved.startsWith(mount + '/');
+  return volumes.filter(entry => within(entry.mountPoint)).sort((a, b) => b.mountPoint.length - a.mountPoint.length)[0];
+}
+
 export function installRootStatus(root: string, volumes: VolumeInfo[]): 'ok' | 'disconnected' | 'unsupported' {
   const resolved = path.resolve(root);
-  const within = (mount: string) => mount === '/' || resolved === mount || resolved.startsWith(mount + '/');
-  const volume = volumes.filter(entry => within(entry.mountPoint)).sort((a, b) => b.mountPoint.length - a.mountPoint.length)[0];
+  const volume = volumeFor(resolved, volumes);
   // Anything under /Volumes lives on its own disk, never on the boot volume.
   if (!volume || volume.mountPoint === '/' && (resolved === '/Volumes' || resolved.startsWith('/Volumes/'))) return 'disconnected';
   return volume.supported ? 'ok' : 'unsupported';
@@ -105,4 +134,11 @@ export function installRootStatus(root: string, volumes: VolumeInfo[]): 'ok' | '
 
 export function enoughSpace(freeBytes: number, downloadBytes: number): boolean {
   return freeBytes >= downloadBytes * 1.1;
+}
+
+/** Bytes missing (with the 10% margin) to finish a download, or undefined when the disk has enough room. */
+export function spaceShortfall(freeBytes: number, totalBytes: number, downloadedBytes: number): number | undefined {
+  const remaining = Math.max(0, totalBytes - downloadedBytes);
+  if (enoughSpace(freeBytes, remaining)) return undefined;
+  return Math.ceil(remaining * 1.1 - freeBytes);
 }

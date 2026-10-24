@@ -56,10 +56,10 @@ export function StoragePicker({ installRoot, onChosen }: { installRoot: string; 
         {volume.supported
           ? <button className="secondary" disabled={Boolean(busy)} onClick={() => void choose(volume)}>{busy === volume.mountPoint ? <LoaderCircle className="spin" /> : <FolderOpen />}Scegli cartella</button>
           : <div className="button-row">
-            <label>Dimensione (GB)<input type="number" min="1" max={Math.max(1, Math.floor(volume.freeBytes / 1e9))} aria-label={`Dimensione immagine su ${volume.name}`}
+            {volume.hasImage ? <small>Immagine già presente su questo disco.</small> : <label>Dimensione (GB)<input type="number" min="1" max={Math.max(1, Math.floor(volume.freeBytes / 1e9))} aria-label={`Dimensione immagine su ${volume.name}`}
               value={sizes[volume.mountPoint] ?? Math.max(1, Math.min(50, Math.floor(volume.freeBytes / 1e9 / 2)))}
-              onChange={event => setSizes({ ...sizes, [volume.mountPoint]: Math.max(1, Math.round(Number(event.target.value)) || 1) })} /></label>
-            <button className="primary" disabled={Boolean(busy)} onClick={() => void createImage(volume)}>{busy === `image:${volume.mountPoint}` ? <LoaderCircle className="spin" /> : <HardDrive />}Crea immagine APFS</button>
+              onChange={event => setSizes({ ...sizes, [volume.mountPoint]: Math.max(1, Math.round(Number(event.target.value)) || 1) })} /></label>}
+            <button className="primary" disabled={Boolean(busy)} onClick={() => void createImage(volume)}>{busy === `image:${volume.mountPoint}` ? <LoaderCircle className="spin" /> : <HardDrive />}{volume.hasImage ? 'Monta immagine esistente' : 'Crea immagine APFS'}</button>
           </div>}
       </li>)}
     </ul>
