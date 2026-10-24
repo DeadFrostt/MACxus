@@ -1669,7 +1669,6 @@ function registerIpc(): void {
     backend.setExternalRoot(settings.externalXodusRoot);
     runtime.setRoot(settings.runtimeRoot);
     await backend.refresh();
-  if (process.platform === 'darwin') void backend.ensureSigned(() => emitSnapshot());
     await refreshAccount(false);
     await runtime.refresh();
     emitSnapshot();
@@ -1937,6 +1936,7 @@ app.whenReady().then(async () => {
   runtime = new RuntimeManager(store.settings.runtimeRoot, emitLog, () => downloadCancellations.size > 0 || operations.size > 0 || installQueue.size > 0 || preparingInstall || backend?.current.updating === true);
   backend = new BackendManager(app.getPath('userData'), store.settings.externalXodusRoot, emitLog, () => keyringSupport.busy || downloadCancellations.size > 0 || operations.size > 0 || installQueue.size > 0 || preparingInstall || runtime?.current.updating === true);
   await backend.refresh();
+  if (process.platform === 'darwin') void backend.ensureSigned(() => emitSnapshot());
   await runtime.refresh();
   void backend.checkUpdate().then(async () => {
     // First run: install the prebuilt backend automatically so the setup

@@ -27,6 +27,11 @@ describe('parseSigningIdentities', () => {
       { hash: H1, name: 'Apple Development: Someone (ABC123)' },
     ]);
   });
+  it('accepts trust annotations such as (CSSMERR_TP_NOT_TRUSTED)', () => {
+    expect(parseSigningIdentities(`  2) ${H2} "${LOCAL_SIGNING_NAME}" (CSSMERR_TP_NOT_TRUSTED)\n  3) ${H1} "Other" (CSSMERR_TP_CERT_EXPIRED)`)).toEqual([
+      { hash: H2, name: LOCAL_SIGNING_NAME }, { hash: H1, name: 'Other' },
+    ]);
+  });
   it('returns nothing when there are none', () => {
     expect(parseSigningIdentities('     0 valid identities found\n')).toEqual([]);
     expect(parseSigningIdentities('')).toEqual([]);
@@ -42,6 +47,10 @@ describe('findLocalSigningIdentity', () => {
     fake.mockResolvedValue({ code: 0, output: sample });
     expect(await findLocalSigningIdentity()).toBe(H2);
     expect(fake.mock.calls[0].slice(0, 2)).toEqual(['security', ['find-identity', '-p', 'codesigning']]);
+  });
+  it('finds the untrusted self-signed identity as printed by the real tool', async () => {
+    fake.mockResolvedValue({ code: 0, output: `  1) ${H1} "Other \"q\"" (CSSMERR_TP_NOT_TRUSTED)\n  2) ${H2} "${LOCAL_SIGNING_NAME}" (CSSMERR_TP_NOT_TRUSTED)\n` });
+    expect(await findLocalSigningIdentity()).toBe(H2);
   });
   it('ignores similar names', async () => {
     fake.mockResolvedValue({ code: 0, output: `  1) ${H1} "${LOCAL_SIGNING_NAME} copy"\n  2) ${H2} "Other"` });

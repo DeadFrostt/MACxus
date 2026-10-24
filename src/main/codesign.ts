@@ -7,7 +7,7 @@ export const LOCAL_SIGNING_NAME = 'MACxus Local Signing';
 export function parseSigningIdentities(output: string): Array<{ hash: string; name: string }> {
   const identities: Array<{ hash: string; name: string }> = [];
   for (const line of output.split(/\r?\n/)) {
-    const match = /^\s*\d+\)\s+([0-9A-Fa-f]{40})\s+"(.*)"\s*$/.exec(line);
+    const match = /^\s*\d+\)\s+([0-9A-Fa-f]{40})\s+"(.*)"(?:\s+\(\w+\))?\s*$/.exec(line);
     if (match) identities.push({ hash: match[1], name: match[2] });
   }
   return identities;

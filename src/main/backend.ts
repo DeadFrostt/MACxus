@@ -92,10 +92,26 @@ export class BackendManager {
     }
   }
 
+  /** After cargo: sign (darwin), then validate the built backend. Signing must precede validation. */
+  private async signAndValidateBuilt(builtCli: string, builtService: string, log: (line: string) => void): Promise<BackendCapabilities> {
+    await this.signBinaries(builtCli, builtService, log);
+    const capabilities = await this.validate(builtCli);
+    if (!capabilities?.login || !capabilities.streaming || !capabilities.account || !capabilities.externalAuth || !capabilities.packageSelection) throw new Error('The built backend failed command validation.');
+    const runHelp = await run(builtCli, ['run', '--help'], { maxOutput: 100_000 });
+    if (runHelp.code !== 0 || !runHelp.output.includes('--materialize-chain')) throw new Error('The built backend lacks launch-chain support.');
+    return capabilities;
+  }
+
   /** macOS startup: sign the current managed backend if it is not yet signed with the local certificate. */
   async ensureSigned(onStatus: () => void = () => {}): Promise<void> {
     if (this.platform !== 'darwin') return;
     try {
+      if (this.status.updating || this.isOperationActive()) {
+        // Re-signing rewrites the file in place; never do it under a running backend or build.
+        this.status.signingIdentity = Boolean(await findLocalSigningIdentity());
+        onStatus();
+        return;
+      }
       const binary = this.status.source === 'managed' ? this.status.binaryPath : undefined;
       if (binary) await this.signBinaries(binary, path.join(path.dirname(binary), 'xodus-service'), line => this.emitLog('backend', line), true);
       else this.status.signingIdentity = Boolean(await findLocalSigningIdentity());
@@ -304,11 +320,7 @@ export class BackendManager {
       });
       if (result.code !== 0) throw new Error(`cargo build exited with code ${result.code}`);
       const builtCli = path.join(target, 'release', 'xodus-cli');
-      await this.signBinaries(builtCli, path.join(target, 'release', 'xodus-service'), log);
-      const capabilities = await this.validate(builtCli);
-      if (!capabilities?.login || !capabilities.streaming || !capabilities.account || !capabilities.externalAuth || !capabilities.packageSelection) throw new Error('The built backend failed command validation.');
-      const runHelp = await run(builtCli, ['run', '--help'], { maxOutput: 100_000 });
-      if (runHelp.code !== 0 || !runHelp.output.includes('--materialize-chain')) throw new Error('The built backend lacks launch-chain support.');
+      const capabilities = await this.signAndValidateBuilt(builtCli, path.join(target, 'release', 'xodus-service'), log);
       await this.assertUpdateAllowed();
 
       const releaseDir = path.join(this.managedRoot, 'releases', `${commit}-${LINUX_RUN_RELEASE}-local-${randomUUID()}`);
