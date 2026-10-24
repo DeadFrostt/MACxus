@@ -1,0 +1,83 @@
+src/main/auth-browser-launch.test.ts > Chrome discovery > allows executable native Chrome on an absolute PATH only
+src/main/auth-browser-launch.test.ts > Chrome discovery > bounds lookup failures and reports missing Chrome accurately
+src/main/auth-browser-launch.test.ts > Chrome discovery > does not execute a missing or nonexecutable Flatpak
+src/main/auth-browser-launch.test.ts > Chrome discovery > falls back to the system installation without installing anything
+src/main/auth-browser-launch.test.ts > Chrome discovery > finds a user-installed Chrome by exact Flatpak ref
+src/main/auth-browser-launch.test.ts > Chrome discovery > prefers native Chrome without starting Flatpak
+src/main/auth-browser-launch.test.ts > Chrome discovery > rejects an unexpected app or untrusted ref: app/com.google.Chrome/x86_64/beta
+src/main/auth-browser-launch.test.ts > Chrome discovery > rejects an unexpected app or untrusted ref: app/com.google.Chrome/x86_64/stable --extra-argument
+src/main/auth-browser-launch.test.ts > Chrome discovery > rejects an unexpected app or untrusted ref: app/org.chromium.Chromium/x86_64/stable
+src/main/auth-browser-launch.test.ts > Chrome discovery > rejects an unexpected app or untrusted ref: garbage
+src/main/backend.test.ts > prebuilt backend > verifies install and preserves the old pointer on failure: valid
+src/main/desktop-open.test.ts > external desktop input environment > opens a literal target with the original IME, not launcher settings: /tmp/folder with 'quote and $literal
+src/main/desktop-open.test.ts > external desktop input environment > opens a literal target with the original IME, not launcher settings: https://example.com/?literal=$value&x=1
+src/main/desktop-open.test.ts > external desktop input environment > surfaces opener failure without trying a second potentially duplicate launch
+src/main/download-cleanup.test.ts > deletes only its proven new folder, preserving existing games and saves alongside it
+src/main/download-cleanup.test.ts > does not trust a changed ownership marker
+src/main/download-cleanup.test.ts > does not trust a missing ownership marker
+src/main/download-cleanup.test.ts > does not trust a symlink ownership marker
+src/main/download-cleanup.test.ts > never overwrites a replacement at the original path when cleanup fails
+src/main/download-cleanup.test.ts > preserves a new folder containing an unsafe link, including the linked save target
+src/main/download-cleanup.test.ts > refuses symlinked private proof and ownership directories
+src/main/download-cleanup.test.ts > rejects same-device bind mounts before deleting any files
+src/main/download-cleanup.test.ts > reports partial cleanup and restores remaining files without deleting another folder
+src/main/download-cleanup.test.ts > retains proof across launcher restarts but never trusts task flags
+src/main/download-cleanup.test.ts > revalidates the atomically moved directory before deletion if the source was replaced during cancellation
+src/main/game-delete.test.ts > permanently deletes only the validated game folder, preserving outside saves and linked targets
+src/main/game-delete.test.ts > rejects a directory masquerading as the game manifest
+src/main/game-delete.test.ts > rejects a directory replacement after confirmation/validation
+src/main/game-delete.test.ts > rejects a file replacement after confirmation/validation
+src/main/game-delete.test.ts > rejects a missing replacement after confirmation/validation
+src/main/game-delete.test.ts > rejects a symlink masquerading as the game manifest
+src/main/game-delete.test.ts > rejects a symlink replacement after confirmation/validation
+src/main/game-delete.test.ts > rejects an ancestor replaced by a symbolic link even if the folder identity remains the same
+src/main/game-delete.test.ts > rejects overlapping parent games and aliases, not just literal nested paths
+src/main/game-delete.test.ts > reports partial failure honestly without retrying or pretending the files were kept
+src/main/game-process.test.ts > game process > force-stops through the exact prefix control and kills a signal-resistant group
+src/main/game-process.test.ts > game process > stops the game process group without signalling unrelated processes
+src/main/game-removal.test.ts > game removal target > accepts an isolated game directory with a manifest
+src/main/game-removal.test.ts > game removal target > rejects a directory containing another game
+src/main/game-removal.test.ts > game removal target > rejects a protected directory and a missing manifest
+src/main/game-shortcuts.test.ts > creates Steam launch descriptions without unwanted desktop/menu entries and preserves profile arguments
+src/main/game-shortcuts.test.ts > creates profile-scoped desktop/menu entries and starts the launcher, not the game
+src/main/install-integration.test.ts > keeps new partials by default and refuses deletion of an existing folder or an update
+src/main/install-integration.test.ts > offers cleanup only for a new folder and waits for process exit before deleting it
+src/main/install-integration.test.ts > passes all native profiles to Steam-owned live import without login preferences, preserving offline choice
+src/main/install-integration.test.ts > removes only unrelated games while downloading, without interrupting the queue
+src/main/install-integration.test.ts > runs real queue IPC, pause/cancel/failure/restart and simultaneous play/download safely
+src/main/install-queue.test.ts > installation destination locks > reserves future paths behind dangling relative and chained symlinks
+src/main/install-queue.test.ts > installation destination locks > resolves symlinked ancestors before protecting new paths
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > does not change desktop input even when Steam is running: 
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > does not change desktop input even when Steam is running: GNOME
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > does not change desktop input even when Steam is running: KDE
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > does not change desktop input even when Steam is running: KDE:gamescope-nested
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > does not change desktop input even when Steam is running: notgamescope
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > does not change native Node helper input or arguments
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > filters before native Node helper mode and skips font bootstrap as before
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > keeps other library order and loader tokens with mixed delimiters
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > leaves non-overlay preload bytes unchanged: "  :: "
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > leaves non-overlay preload bytes unchanged: ""
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > leaves non-overlay preload bytes unchanged: "/custom/libMangoHud.so"
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > leaves non-overlay preload bytes unchanged: "/literal/trailing\n"
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > leaves non-overlay preload bytes unchanged: "custom[12].so:$ORIGIN/$LIB/custom.so"
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > matches only the exact overlay basename, not substrings or directory names
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > never evaluates shell syntax or expands globbed preload entries
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > preserves an unset preload, arguments, exit code and exec process identity
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > preserves custom or unset IME in Game Mode: ""
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > preserves custom or unset IME in Game Mode: "Steam;$(false)"
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > preserves custom or unset IME in Game Mode: "fcitx"
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > preserves custom or unset IME in Game Mode: "ibus"
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > preserves custom or unset IME in Game Mode: "simple"
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > preserves custom or unset IME in Game Mode: "steam"
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > preserves custom or unset IME in Game Mode: undefined
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > preserves font bootstrap and original user font configuration
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > removes every Steam overlay before both Electron invocations: "/steam/ubuntu12_32/gameoverlayrenderer.so /steam/ubuntu12_64/gameoverlayrenderer.so"
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > removes every Steam overlay before both Electron invocations: ":/steam/ubuntu12_64/gameoverlayrenderer.so::gameoverlayrenderer.so:"
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > removes every Steam overlay before both Electron invocations: "gameoverlayrenderer.so"
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > retains Steam tracking and display/library environment without adding sandbox flags
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > selects simple IME before Electron starts only in Game Mode: Gamescope
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > selects simple IME before Electron starts only in Game Mode: gamescope
+src/main/launcher-bootstrap.test.ts > packaged Linux launcher bootstrap > selects simple IME before Electron starts only in Game Mode: steam:GaMeScOpE
+src/main/launcher-environment.test.ts > launcher-only Steam input fallback > gives an actual tracked child the original input without the private marker
+src/main/steam-shortcuts.test.ts > Steam filesystem integration > discovers existing native and Flatpak profiles, deduplicating Steam symlinks
+src/main/windows-path.test.ts > prefers an exact name and refuses ambiguous fallbacks, traversal, directories and escaping symlinks

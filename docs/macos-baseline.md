@@ -7,51 +7,55 @@ Recorded on branch `macos` (created from a5827f9) before any macOS changes.
 - **npm:** 10.9.8
 - **Platform:** darwin (macOS, Darwin 27.2.0)
 
-## `npm test` (vitest run)
+## Authoritative failure list
+
+**`docs/macos-baseline-failures.txt` is the authoritative list** of failing tests: one line per test, `<test file> > <describe ancestors> > <test name>`, sorted, 83 lines, no duplicates. Test names are normalised so a multi-line title is one line.
+
+Regenerate and diff against the baseline (run from the repo root; the output file lives in `$TMPDIR`):
+
+```sh
+J="${TMPDIR:-/tmp}/macxus-now.json"
+npx vitest run --reporter=json --outputFile="$J"; node -e 'const fs=require("fs");const r=JSON.parse(fs.readFileSync(process.argv[1]));const L=[];for(const f of r.testResults){const rel=f.name.replace(process.cwd()+"/","");for(const a of f.assertionResults)if(a.status==="failed")L.push(rel+" > "+a.ancestorTitles.concat([a.title]).join(" > ").replace(/\s*\n\s*/g," "));if(f.status==="failed"&&!f.assertionResults.length)L.push(rel+" > <file-level failure>")}process.stdout.write(L.join("\n")+"\n")' "$J" | LC_ALL=C sort | diff docs/macos-baseline-failures.txt -
+```
+
+An empty diff means no change. Lines prefixed `>` are new failures; lines prefixed `<` are baseline failures that now pass.
+
+## Totals (`npm test`, vitest run)
 
 - Test files: 14 failed | 82 passed (96)
 - Tests: 83 failed | 917 passed (1000)
 
-### Failing test files and reasons
+These totals came from two text-reporter runs and one JSON-reporter run, which all agreed.
 
-Reasons are from the vitest output. Most failures are Linux-only guards, Linux-specific fixtures or assumptions, or macOS path behaviour (`/var` is a symlink to `/private/var`, and the default filesystem is case-insensitive).
+## Flaky tests (timing)
 
-- `src/main/auth-browser-launch.test.ts` (10): "Browser sign-in is currently supported on Linux with Google Chrome" (Linux-only guard).
-- `src/main/backend.test.ts` (1): "The prebuilt backend currently supports x86_64 Linux only."
-- `src/main/desktop-open.test.ts` (3): expects the Linux `xdg-open` opener call and behaviour.
-- `src/main/download-cleanup.test.ts` (11): Linux filesystem fixtures; ENOENT on fixture rename/open and unexpected "Only a new installation folder..." errors.
-- `src/main/game-delete.test.ts` (10): "The game location contains a symbolic link." (macOS `/var` symlink in fixture paths).
-- `src/main/game-process.test.ts` (2): fixture launch script (`launch-game`) fails to run as a command.
-- `src/main/game-removal.test.ts` (3): "The game location contains a symbolic link." (macOS `/var` symlink in fixture paths).
-- `src/main/game-shortcuts.test.ts` (2): fixture `launch-game` shortcut script fails to execute.
-- `src/main/install-integration.test.ts` (5): ENOENT on fixture download paths; unexpected installation-folder errors.
-- `src/main/install-queue.test.ts` (2): symlinked-ancestor assertions; `/private/var/...` vs `/var/...` realpath mismatch.
-- `src/main/launcher-bootstrap.test.ts` (31): packaged Linux launcher script fails under macOS shell ("syntax error near unexpected token `;;'" at line 14 in the temp launcher); Linux IME/overlay expectations.
-- `src/main/launcher-environment.test.ts` (1): expected IME `'Steam'`, got `'simple'` (Linux input-method logic).
-- `src/main/steam-shortcuts.test.ts` (1): "Steam integration is currently supported on Linux only."
-- `src/main/windows-path.test.ts` (1): expected `'Game.exe'` to be undefined for `game.exe` (case-insensitive APFS resolves the name).
+Some tests hit vitest's 5000 ms timeout (`Error: Test timed out in 5000ms.`) on some runs. In two extra JSON-reporter runs, these tests timed out and are **not** in the baseline list:
 
-### Failing test names
+- `src/main/account-library.test.ts` (maps real failed child processes to safe session guidance...)
+- `src/main/backend-diagnostics.test.ts` (records achievement command metadata...)
+- `src/main/proton.test.ts` (keeps the prefix... and provisions every verified shared DXVK module...)
+- `src/main/runtime.test.ts` (verifies a downloaded Nexus runtime... `stderr-warning` and `valid`)
 
-<details>
-<summary>All 83 failing tests</summary>
+If a diff shows one of these as a new failure, check the timeout before treating it as a regression. Conversely, `backend-diagnostics.test.ts > observes actual tracked CLI calls without capturing license JSON or paths` failed in one JSON run only. The text runs and the final JSON run did not show it.
 
-- auth-browser-launch: allows executable native Chrome on an absolute PATH only; bounds lookup failures and reports missing Chrome accurately; does not execute a missing or nonexecutable Flatpak; falls back to the system installation without installing anything; finds a user-installed Chrome by exact Flatpak ref; prefers native Chrome without starting Flatpak; rejects an unexpected app or untrusted ref (4 cases)
-- backend: verifies install and preserves the old pointer on failure: valid
-- desktop-open: opens a literal target with the original IME (2 cases); surfaces opener failure without trying a second potentially duplicate launch
-- download-cleanup: deletes only its proven new folder, preserving existing games and saves alongside it; does not trust a changed / missing / symlink ownership marker; never overwrites a replacement at the original path when cleanup fails; preserves a new folder containing an unsafe link; refuses symlinked private proof and ownership directories; rejects same-device bind mounts before deleting any files; reports partial cleanup and restores remaining files; retains proof across launcher restarts but never trusts task flags; revalidates the atomically moved directory before deletion
-- game-delete: permanently deletes only the validated game folder; rejects a directory / symlink masquerading as the game manifest; rejects directory, file, symlink and missing replacement after validation; rejects an ancestor replaced by a symbolic link; rejects overlapping parent games and aliases; reports partial failure honestly
-- game-process: stops the game process group without signalling unrelated processes; force-stops through the exact prefix control and kills a signal-resistant group
-- game-removal: accepts an isolated game directory with a manifest; rejects a directory containing another game; rejects a protected directory and a missing manifest
-- game-shortcuts: creates Steam launch descriptions without unwanted desktop/menu entries; creates profile-scoped desktop/menu entries and starts the launcher
-- install-integration: keeps new partials by default and refuses deletion of an existing folder or an update; offers cleanup only for a new folder and waits for process exit; passes all native profiles to Steam-owned live import; removes only unrelated games while downloading; runs real queue IPC, pause/cancel/failure/restart
-- install-queue: resolves symlinked ancestors before protecting new paths; reserves future paths behind dangling relative and chained symlinks
-- launcher-bootstrap (31): see file-level reason above (IME, overlay, preload, Steam Game Mode and bootstrap-shell cases)
-- launcher-environment: gives an actual tracked child the original input without the private marker
-- steam-shortcuts: discovers existing native and Flatpak profiles, deduplicating Steam symlinks
-- windows-path: prefers an exact name and refuses ambiguous fallbacks, traversal, directories and escaping symlinks
+## Per-file failure reasons (hypotheses)
 
-</details>
+These are reasoned from the failure messages and have not been verified by changing code.
+
+- `auth-browser-launch.test.ts` (10): Linux-only guard ("Browser sign-in is currently supported on Linux with Google Chrome").
+- `backend.test.ts` (1): prebuilt backend supports x86_64 Linux only.
+- `desktop-open.test.ts` (3): expects Linux `xdg-open` opener behaviour.
+- `download-cleanup.test.ts` (11): Linux filesystem fixtures; ENOENT on fixture paths and unexpected installation-folder errors.
+- `game-delete.test.ts` (10) and `game-removal.test.ts` (3): "The game location contains a symbolic link." Hypothesis: fixture paths sit under `/var`, which is a symlink to `/private/var` on macOS.
+- `game-process.test.ts` (2) and `game-shortcuts.test.ts` (2): fixture `launch-game` script fails to execute.
+- `install-integration.test.ts` (5): ENOENT on fixture download paths; unexpected installation-folder errors.
+- `install-queue.test.ts` (2): symlinked-ancestor realpath mismatch (`/private/var/...` vs `/var/...`).
+- `launcher-bootstrap.test.ts` (31): Linux IME, overlay and preload expectations, and the packaged launcher shell script (see below).
+- `launcher-environment.test.ts` (1): expected IME `'Steam'`, got `'simple'`. Linux input-method logic.
+- `steam-shortcuts.test.ts` (1): "Steam integration is currently supported on Linux only."
+- `windows-path.test.ts` (1): expected `game.exe` to be undefined. Hypothesis: case-insensitive APFS resolves the name.
+
+**Unexplained:** the `launcher-bootstrap.test.ts` failures include the shell error `syntax error near unexpected token `;;'` at line 14 of the temp launcher script (`launcher with spaces and 'quote/xodus-nexus`). The cause has not been investigated. It is not confirmed to be a macOS-specific issue (it could be the `/bin/sh` version, the quoting in the path, or the test's own script).
 
 ## `npm run typecheck`
 
