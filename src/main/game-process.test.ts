@@ -72,3 +72,17 @@ describe('game process', () => {
     } finally { await game.cleanup(); await rm(directory, { recursive: true, force: true }); }
   });
 });
+
+describe('waitForGameExit', () => {
+  it('reports when every game result settled within the bound, including failures', async () => {
+    const { waitForGameExit } = await import('./game-process.js');
+    expect(await waitForGameExit([Promise.resolve(1), Promise.reject(new Error('exit 1'))], 1_000)).toBe(true);
+    expect(await waitForGameExit([], 1_000)).toBe(true);
+  });
+  it('gives up after the bound when a game is still cleaning up', async () => {
+    const { waitForGameExit } = await import('./game-process.js');
+    const started = Date.now();
+    expect(await waitForGameExit([new Promise(() => {})], 50)).toBe(false);
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+});

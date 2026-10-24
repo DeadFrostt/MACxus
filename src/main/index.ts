@@ -18,14 +18,14 @@ import { inspectGameDirectory, StateStore } from './store.js';
 import { RuntimeManager } from './runtime.js';
 import { prepareProtonRunner, syncPrefixUserLocale, syncUnrealCultureGameIni, type ProtonRunner } from './proton.js';
 import { findCrossOver, prepareCrossOverRunner } from './crossover.js';
-import { CROSSOVER_MISSING, runtimeDllDirectory, serviceSocketPathFits } from './mac-launch.js';
+import { CROSSOVER_MISSING, macRuntimeAvailable, runtimeDllDirectory, serviceSocketPathFits } from './mac-launch.js';
 import { CatalogService } from './catalog.js';
 import { cloudSaveRuntime, selectedWinePath, startXodusService, storeContentRuntime, unbridgedCloudSaveRuntime, type XodusServiceSession } from './xodus-service.js';
 import { GameLogReducer, gameLoggingEnvironment, gameWindowEnvironment } from './game-log.js';
 import { downloadVerifiedVcRedist, installedVcRuntimeVersion, VC_REDIST_VERSION, versionAtLeast } from './vc-runtime.js';
 import { assertGameRemovalAvailable, validateGameDeleteTarget } from './game-removal.js';
 import { deleteGameDirectory } from './game-delete.js';
-import { spawnGameProcess, type GameProcess } from './game-process.js';
+import { spawnGameProcess, waitForGameExit, type GameProcess } from './game-process.js';
 import { gameLocaleEnvironment, manifestLocales, manifestTitleId, supportedGameLocale } from './game-locale.js';
 import { antiCheatEnvironment } from './anti-cheat.js';
 import { gameLaunchArguments, preparedGameWine } from './game-launch.js';
@@ -840,12 +840,18 @@ async function importGame(input?: string): Promise<Game | null> {
   return game;
 }
 
+// macOS never executes the runtime's Linux wine; it only needs its Windows DLLs.
+async function selectedRuntimeUsable(wine: string): Promise<boolean> {
+  if (process.platform === 'darwin') return macRuntimeAvailable(wine);
+  return fs.access(wine, constants.X_OK).then(() => true, () => false);
+}
+
 async function gameLaunchOptions(id: string): Promise<GameLaunchOptions> {
   const game = store.games.find((entry) => entry.id === id);
   if (!game) throw new Error('Game not found.');
   const wine = selectedWinePath(store.settings.winePath, store.settings.runtimeRoot, runtime.current.winePath);
   if (!wine) return { cloudSaves: false, cloudReason: 'Select Xodus Runtime in Settings.', vcInstall: false, vcReason: 'Select Xodus Runtime in Settings.' };
-  const wineAvailable = await fs.access(wine, constants.X_OK).then(() => true, () => false);
+  const wineAvailable = await selectedRuntimeUsable(wine);
   if (!wineAvailable) return { cloudSaves: false, cloudReason: 'The selected Wine binary is unavailable.', vcInstall: false, vcReason: 'The selected Wine binary is unavailable.' };
   const protonRoot = path.resolve(path.dirname(wine), '..', '..');
   const protonAvailable = await Promise.all([
@@ -905,8 +911,11 @@ async function prepareGameLaunch(id: string): Promise<void> {
   const titleId = await gameTitleId(game);
   const wine = selectedWinePath(store.settings.winePath, store.settings.runtimeRoot, runtime.current.winePath);
   if (!wine) throw new Error('Select a Wine/Xodus Proton binary in Settings.');
-  try { await fs.access(wine, constants.X_OK); }
-  catch { throw new Error(`The selected Wine runtime is unavailable: ${wine}. Select or reinstall Xodus Runtime in Settings.`); }
+  if (!await selectedRuntimeUsable(wine)) {
+    throw new Error(process.platform === 'darwin'
+      ? `Il runtime Xodus selezionato non è disponibile: ${wine}. Reinstalla Xodus Runtime nelle Impostazioni.`
+      : `The selected Wine runtime is unavailable: ${wine}. Select or reinstall Xodus Runtime in Settings.`);
+  }
   const cloudRuntime = await cloudSaveRuntime(wine);
   if (await unbridgedCloudSaveRuntime(wine)) {
     throw new Error('The active runtime has cloud saves without the required service bridge. Update the active runtime in Settings.');
@@ -926,7 +935,7 @@ async function prepareGameLaunch(id: string): Promise<void> {
     title: game.title,
     kind: 'launch',
     status: 'preparing',
-    phase: 'Preparing Proton and Xodus…',
+    phase: process.platform === 'darwin' ? 'Preparazione di CrossOver e Xodus…' : 'Preparing Proton and Xodus…',
     log: [],
     logPath,
     startedAt: new Date().toISOString(),
@@ -1089,7 +1098,9 @@ async function installGameVcRuntime(id: string): Promise<void> {
   if (inspected.installState !== 'ready') throw new Error(inspected.installMessage ?? 'The game installation is not ready.');
   const wine = selectedWinePath(store.settings.winePath, store.settings.runtimeRoot, runtime.current.winePath);
   if (!wine) throw new Error('Select Xodus Runtime in Settings first.');
-  await fs.access(wine, constants.X_OK);
+  if (process.platform === 'darwin') {
+    if (!await macRuntimeAvailable(wine)) throw new Error(`Il runtime Xodus selezionato non è disponibile: ${wine}. Reinstalla Xodus Runtime nelle Impostazioni.`);
+  } else await fs.access(wine, constants.X_OK);
 
   const operationId = `vc-${id}`;
   const dataRoot = path.dirname(store.settings.runtimeRoot);
@@ -1104,7 +1115,7 @@ async function installGameVcRuntime(id: string): Promise<void> {
     title: game.title,
     kind: 'prerequisite',
     status: 'preparing',
-    phase: 'Preparing the Proton prefix…',
+    phase: process.platform === 'darwin' ? 'Preparazione della bottle CrossOver…' : 'Preparing the Proton prefix…',
     log: [],
     logPath,
     startedAt: new Date().toISOString(),
@@ -1153,7 +1164,7 @@ async function installGameVcRuntime(id: string): Promise<void> {
       }, controller.signal);
       if (controller.signal.aborted) throw new Error('VC++ installation was cancelled.');
       preparationControllers.delete(operationId);
-      addLine('Microsoft installer SHA-256 verified. Installing into this game’s Proton prefix…');
+      addLine(process.platform === 'darwin' ? 'Installer Microsoft verificato (SHA-256). Installazione nella bottle CrossOver…' : 'Microsoft installer SHA-256 verified. Installing into this game’s Proton prefix…');
       const tracked = spawnTracked(protonRunner.command, [installer, '/install', '/quiet', '/norestart'], {
         env: gameLoggingEnvironment({ ...process.env }),
         onLine: addLine,
@@ -1168,7 +1179,7 @@ async function installGameVcRuntime(id: string): Promise<void> {
       if (!installed || !versionAtLeast(installed, VC_REDIST_VERSION)) {
         throw new Error(`Microsoft VC++ installer exited with code ${result.code}, but required version ${VC_REDIST_VERSION} was not registered (found ${installed ?? 'none'}).`);
       }
-      addLine(`Microsoft VC++ ${installed} installed in this game’s Proton prefix.`);
+      addLine(process.platform === 'darwin' ? `Microsoft VC++ ${installed} installato nella bottle CrossOver.` : `Microsoft VC++ ${installed} installed in this game’s Proton prefix.`);
     }
     if (gameOperation?.id === operationId) {
       gameOperation.status = 'complete';
@@ -1594,6 +1605,7 @@ function registerIpc(): void {
     return addSteamShortcut(accounts[selected], launch, artwork);
   });
   ipcMain.handle('create-game-shortcut', async (_event, id: string, destination: ShortcutDestination) => {
+    if (process.platform === 'darwin') throw new Error('Le scorciatoie desktop non sono disponibili su macOS.');
     const game = store.games.find(entry => entry.id === id);
     if (!game) throw new Error('Game not found.');
     if (destination !== 'desktop' && destination !== 'applications') throw new Error('Invalid shortcut destination.');
@@ -1614,7 +1626,7 @@ function registerIpc(): void {
     const gameProcess = gameProcesses.get(gameOperation.id);
     const controller = preparationControllers.get(gameOperation.id);
     if (!child && !controller) throw new Error('Xodus is still preparing; try stopping again in a moment.');
-    if (child && gameOperation.kind === 'prerequisite') throw new Error('VC++ installation is running. Wait for it to finish; interrupting it could damage the Proton prefix.');
+    if (child && gameOperation.kind === 'prerequisite') throw new Error(process.platform === 'darwin' ? 'Installazione di VC++ in corso. Attendi la fine: interromperla potrebbe danneggiare la bottle CrossOver.' : 'VC++ installation is running. Wait for it to finish; interrupting it could damage the Proton prefix.');
     gameOperation.status = 'stopping';
     gameOperation.phase = child ? 'Stopping Xodus and Wine…' : 'Cancelling prerequisite download…';
     controller?.abort();
@@ -1930,7 +1942,8 @@ app.whenReady().then(async () => {
     // wizard's sign-in step works without a detour into Settings. Users who
     // configured a validated external backend are left alone; the managed
     // release never touches an external checkout.
-    if (!store.settings.firstRunCompleted && !backend.current.available &&
+    // macOS has no prebuilt backend (it is linux/x64); Settings points to building it.
+    if (process.platform !== 'darwin' && !store.settings.firstRunCompleted && !backend.current.available &&
         backend.current.releaseAvailable && backend.current.updateAvailable) {
       try {
         await backend.update(emitSnapshot);
@@ -2013,6 +2026,11 @@ app.on('before-quit', (event) => {
       new Promise<void>((resolve) => setTimeout(resolve, 8_000)),
     ]);
     await Promise.all([...gameProcesses.values()].map((process) => process.forceStop().catch((error) => console.error('Could not force-stop game on exit:', error))));
+    // macOS: xodus-cli syncs game files back and detaches the RAM disk after
+    // Wine stops; keep its pipes open until it exits (bounded).
+    if (process.platform === 'darwin' && !await waitForGameExit(runningGames.map((game) => game.result), 15_000)) {
+      console.error('A game did not finish its cleanup within 15 s of quitting.');
+    }
     await Promise.all([...serviceSessions.values()].map((session) => session.stop().catch((error) => console.error('Account service cleanup failed on exit:', error))));
   })().catch((error) => console.error('Launcher shutdown cleanup failed:', error)).finally(async () => {
     await backendDiagnostics?.flush();

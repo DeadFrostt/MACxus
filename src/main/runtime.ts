@@ -5,6 +5,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import type { RuntimeStatus } from '../shared/types.js';
 import { run } from './process.js';
+import { macRuntimeAvailable } from './mac-launch.js';
 
 const REPOSITORY = 'xodus-gaming/Proton';
 const BRANCH = 'xodus/bleeding-edge';
@@ -58,8 +59,10 @@ export class RuntimeManager {
   private latestArtifact?: ArtifactInfo;
   private nexusArtifact?: NexusArtifact;
   private readonly fetcher: typeof fetch;
+  private readonly platform: NodeJS.Platform;
 
-  constructor(runtimeRoot: string, emitLog: (scope: string, line: string) => void, isOperationActive: () => boolean, fetcher: typeof fetch = fetch) {
+  constructor(runtimeRoot: string, emitLog: (scope: string, line: string) => void, isOperationActive: () => boolean, fetcher: typeof fetch = fetch, platform: NodeJS.Platform = process.platform) {
+    this.platform = platform;
     this.emitLog = emitLog;
     this.isOperationActive = isOperationActive;
     this.fetcher = fetcher;
@@ -87,6 +90,8 @@ export class RuntimeManager {
   }
 
   private async validateWine(winePath: string): Promise<boolean> {
+    // macOS: the runtime's wine is a Linux ELF; validate the DLLs it provides.
+    if (this.platform === 'darwin') return macRuntimeAvailable(winePath);
     try {
       await fs.access(winePath, constants.X_OK);
       const result = await run(winePath, ['--version'], { maxOutput: 30_000 });
@@ -244,7 +249,11 @@ export class RuntimeManager {
       if (result.code !== 0) throw new Error('Runtime extraction failed.');
       const candidateRoot = path.join(extracted, top);
       const candidateWine = path.join(candidateRoot, 'files', 'bin', 'wine');
-      if (!await this.validateWine(candidateWine)) throw new Error('The downloaded Wine failed --version validation.');
+      if (!await this.validateWine(candidateWine)) {
+        throw new Error(this.platform === 'darwin'
+          ? 'Il runtime scaricato non contiene le DLL Xodus richieste.'
+          : 'The downloaded Wine failed --version validation.');
+      }
       if (this.isOperationActive()) throw new Error('Another operation started during installation; the runtime was not activated.');
 
       const releases = path.join(this.status.runtimeRoot, 'releases');

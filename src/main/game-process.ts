@@ -65,3 +65,16 @@ export async function spawnGameProcess(
     cleanup: drainGroup,
   };
 }
+
+/**
+ * Waits, at most timeoutMs, for every game result to settle (success or
+ * failure). On macOS xodus-cli still copies game files back and detaches its
+ * RAM disk after Wine stops; quitting earlier closes its stderr pipe.
+ */
+export async function waitForGameExit(results: Promise<unknown>[], timeoutMs: number): Promise<boolean> {
+  let timer: NodeJS.Timeout | undefined;
+  const settled = Promise.allSettled(results).then(() => true);
+  const expired = new Promise<boolean>((resolve) => { timer = setTimeout(() => resolve(false), timeoutMs); });
+  try { return await Promise.race([settled, expired]); }
+  finally { clearTimeout(timer); }
+}

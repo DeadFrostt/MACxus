@@ -58,3 +58,17 @@ it('marks single-click menu triggers and menu boundaries for outside-pointer dis
     onBrowse={() => {}} onSettings={() => {}} onInstallVc={() => {}} onRemove={() => {}} />);
   expect(menu).toContain('data-game-menu'); expect(menu).toContain('role="menu"');
 });
+
+it('hides the Linux .desktop shortcut items on macOS', () => {
+  const props = { game: { ...demoSnapshot().games[0], installState: 'ready' as const }, options: { cloudSaves: true, vcInstall: true }, busy: false,
+    onBrowse: () => {}, onSettings: () => {}, onInstallVc: () => {}, onRemove: () => {}, onShortcut: () => {} };
+  const linux = renderToStaticMarkup(<GameMenuActions {...props} />);
+  expect(linux).toContain('Create desktop shortcut');
+  expect(linux).toContain('Add to applications menu');
+  const mac = renderToStaticMarkup(<GameMenuActions {...props} hideSteam hideDesktopShortcuts />);
+  expect(mac).not.toContain('Create desktop shortcut');
+  expect(mac).not.toContain('Add to applications menu');
+  expect(mac).not.toContain('Add to Steam');
+  const source = readFileSync('src/renderer/App.tsx', 'utf8');
+  expect(source).toContain("hideDesktopShortcuts: data.platform === 'darwin'");
+});

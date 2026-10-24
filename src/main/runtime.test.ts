@@ -123,7 +123,7 @@ describe('previewBaseRelease', () => {
       const file = path.join(build, url.split('/').pop()!);
       return new Response(await fs.readFile(file), { status: 200 });
     }) as typeof fetch;
-    const manager = new RuntimeManager(root, () => undefined, () => false, fetcher);
+    const manager = new RuntimeManager(root, () => undefined, () => false, fetcher, 'linux');
     const originalPreload = process.env.LD_PRELOAD;
     if (scenario === 'stderr-warning') process.env.LD_PRELOAD = path.join(root, 'nonexistent-test-overlay.so');
     try {
@@ -156,6 +156,30 @@ describe('previewBaseRelease', () => {
     }
   });
 
+  it('on macOS reports a runtime installed from its Windows DLLs without executing the Linux wine', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'xodus-runtime-mac-'));
+    const release = path.join(root, 'releases', 'xodus-nexus-runtime-test');
+    const winePath = path.join(release, 'files', 'bin', 'wine');
+    const dlls = path.join(release, 'files', 'lib', 'wine', 'x86_64-windows');
+    try {
+      await fs.mkdir(path.dirname(winePath), { recursive: true });
+      await fs.mkdir(dlls, { recursive: true });
+      // A Linux ELF stand-in: present but neither executable nor runnable here.
+      await fs.writeFile(winePath, '\x7fELF not for macOS', { mode: 0o644 });
+      for (const name of ['xgameruntime.dll', 'windows.web.dll', 'twinapi.appcore.dll', 'gamingtcui.dll']) await fs.writeFile(path.join(dlls, name), 'MZ');
+      await fs.writeFile(path.join(release, 'XODUS_NEXUS_PATCH.json'), JSON.stringify({ features: [] }));
+      await fs.writeFile(path.join(root, 'current.json'), JSON.stringify({ name: 'xodus-nexus-runtime-test', winePath, commit: 'c', installedAt: 'now' }));
+      const status = await new RuntimeManager(root, () => undefined, () => false, fetch, 'darwin').refresh();
+      expect(status.installed).toBe(true);
+      expect(status.winePath).toBe(winePath);
+
+      await fs.rm(path.join(dlls, 'gamingtcui.dll'));
+      expect((await new RuntimeManager(root, () => undefined, () => false, fetch, 'darwin').refresh()).installed).toBe(false);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('extracts the preserved base release', () => {
     expect(previewBaseRelease('proton-xodus-test-offline-v2-xgamesave-pr28-3fd4ae1091')).toBe('proton-xodus-test-offline-v2');
     expect(previewBaseRelease('proton-xodus-test-offline-v2-xgamesave-pr28-3fd4ae1091-bridge-v1')).toBe('proton-xodus-test-offline-v2');
@@ -180,7 +204,7 @@ describe('previewBaseRelease', () => {
       await fs.writeFile(path.join(root, 'current.json'), JSON.stringify({
         name: `${base}-xgamesave-pr28-3fd4ae1091`, winePath: '/preview/wine', commit: 'abc', installedAt: 'before',
       }));
-      const manager = new RuntimeManager(root, () => undefined, () => false);
+      const manager = new RuntimeManager(root, () => undefined, () => false, fetch, 'linux');
       expect(await manager.rollbackCloudSavePreview(() => undefined)).toBe(winePath);
       const pointer = JSON.parse(await fs.readFile(path.join(root, 'current.json'), 'utf8')) as { name: string; winePath: string };
       expect(pointer.name).toBe(base);

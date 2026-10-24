@@ -641,3 +641,11 @@ button.primary, button.secondary { border-radius: 5px; min-height: 40px; font-si
 .storage-volume.selected { border-color: var(--accent, #107c10); }
 .storage-volume small { display: block; opacity: .75; }
 .storage-volume input[type="number"] { width: 72px; margin-left: 6px; }
+
+/* macOS hidden-inset title bar: the window moves by its top strip. The
+   sidebar strip keeps content below the traffic lights; interactive
+   children stay clickable. */
+.mac-drag-strip { height: 30px; margin: -14px -12px 6px; flex: none; -webkit-app-region: drag; }
+.platform-darwin .sidebar { position: relative; }
+.platform-darwin .topbar { -webkit-app-region: drag; }
+.platform-darwin .topbar :is(input, button, a, select, textarea, [role="listbox"], [role="option"], [tabindex]) { -webkit-app-region: no-drag; }

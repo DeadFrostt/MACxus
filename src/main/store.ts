@@ -14,25 +14,32 @@ interface PersistedState {
   settings: Settings;
 }
 
-const defaultDataRoot = path.join(os.homedir(), '.local', 'share', 'xodus-nexus');
-const defaultSettings: Settings = {
-  installRoot: path.join(os.homedir(), 'Games', process.platform === 'darwin' ? 'MACxus' : 'Xodus Nexus'),
-  market: 'neutral',
-  parallelDownloads: 4,
-  downloadLimitMiB: 0,
-  winePath: '',
-  externalXodusRoot: '',
-  runtimeRoot: path.join(defaultDataRoot, 'runtimes'),
-  verboseLogs: false,
-};
+// macOS keeps runtimes, bottles and logs under the app's user-data folder
+// (~/Library/Application Support/MACxus); Linux keeps the XDG data root.
+function defaultSettings(userData: string, platform: NodeJS.Platform): Settings {
+  const dataRoot = platform === 'darwin' ? userData : path.join(os.homedir(), '.local', 'share', 'xodus-nexus');
+  return {
+    installRoot: path.join(os.homedir(), 'Games', platform === 'darwin' ? 'MACxus' : 'Xodus Nexus'),
+    market: 'neutral',
+    parallelDownloads: 4,
+    downloadLimitMiB: 0,
+    winePath: '',
+    externalXodusRoot: '',
+    runtimeRoot: path.join(dataRoot, 'runtimes'),
+    verboseLogs: false,
+  };
+}
 
 export class StateStore {
   private writes: Promise<void> = Promise.resolve();
-  private state: PersistedState = { games: [], downloads: [], settings: defaultSettings };
+  private state: PersistedState;
   private readonly file: string;
+  private readonly defaults: Settings;
 
-  constructor(userData: string) {
+  constructor(userData: string, platform: NodeJS.Platform = process.platform) {
     this.file = path.join(userData, 'launcher-state.json');
+    this.defaults = defaultSettings(userData, platform);
+    this.state = { games: [], downloads: [], settings: { ...this.defaults } };
   }
 
   async load(): Promise<void> {
@@ -53,7 +60,7 @@ export class StateStore {
             ...task, status: 'paused' as const, canPause: true, controlPending: false,
             transferRate: undefined, phase: 'Paused — resume to reconnect and restore saved download checkpoints',
           } : task) : [],
-        settings: Object.fromEntries(Object.entries({ ...defaultSettings, ...parsed.settings, downloadLimitMiB }).filter(([key]) => key !== 'separateGameProcess')) as unknown as Settings,
+        settings: Object.fromEntries(Object.entries({ ...this.defaults, ...parsed.settings, downloadLimitMiB }).filter(([key]) => key !== 'separateGameProcess')) as unknown as Settings,
       };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') console.warn('State could not be loaded', error);

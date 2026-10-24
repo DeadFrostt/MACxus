@@ -292,3 +292,17 @@ describe('inspectGameDirectory titles containing quotes', () => {
     expect(game.title).toBe('A "quoted" Game');
   });
 });
+
+describe('default data root', () => {
+  it('keeps runtimes, and so bottles and logs, under the MACxus user-data folder on macOS', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'nexus-macxus-root-')); created.push(directory);
+    const store = new StateStore(directory, 'darwin'); await store.load();
+    expect(store.settings.runtimeRoot).toBe(path.join(directory, 'runtimes'));
+    expect(path.dirname(store.settings.runtimeRoot)).toBe(directory);
+  });
+  it('keeps the Linux XDG data root on Linux', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'nexus-linux-root-')); created.push(directory);
+    const store = new StateStore(directory, 'linux'); await store.load();
+    expect(store.settings.runtimeRoot).toMatch(/\.local\/share\/xodus-nexus\/runtimes$/);
+  });
+});

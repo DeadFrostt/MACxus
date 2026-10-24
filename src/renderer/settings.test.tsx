@@ -69,4 +69,17 @@ describe('Settings diagnostics', () => {
     expect(main).toContain(data.runtime.error);
     expect(main).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*?Sign in again<\/button>/);
   });
+  it('on macOS points to building the backend from source instead of the Linux prebuilt release', () => {
+    const data = demoSnapshot();
+    data.platform = 'darwin';
+    data.backend.available = false;
+    data.backend.releaseAvailable = false;
+    data.backend.updateAvailable = false;
+    const html = renderToStaticMarkup(<SettingsPage data={data} toast={() => {}} />);
+    const main = html.replace(/<details\b[^>]*>[\s\S]*?<\/details>/, '');
+    expect(main).toMatch(/<button[^>]*>(?:<svg[\s\S]*?<\/svg>)?Compila il backend<\/button>/);
+    expect(main).toContain('Su macOS il backend Nexus si compila sul tuo Mac dal codice sorgente');
+    expect(main).not.toContain('Install the prebuilt Nexus backend');
+    expect(main).not.toContain('Install backend');
+  });
 });
