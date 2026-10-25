@@ -32,7 +32,7 @@ MACxus signs in with your Microsoft account, shows your library (owned and Game 
 
 Tested on one machine only (MacBook Pro M1 Max, macOS 27.2, CrossOver 26.3). Expect rough edges.
 
-Working so far: TUNIC, Deep Rock Galactic, Minecraft Dungeons II, Super Meat Boy 3D, Mad King Redemption, MARVEL Cosmic Invasion, Vampire Survivors. Halo works with M1 glitches; Forza Horizon 6 does not.
+Working so far: TUNIC, Deep Rock Galactic, Minecraft Dungeons II, Super Meat Boy 3D, Mad King Redemption, MARVEL Cosmic Invasion, Vampire Survivors, and Space Marine 2 offline. Halo works with M1 glitches; Forza Horizon 6 does not.
 
 **Full list with engines and notes: [Game compatibility](docs/COMPATIBILITY.md#english).** Tried a game? [Send a game report](https://github.com/fladnaG86/MACxus/issues/new?template=02-game-report.yml).
 
@@ -86,7 +86,7 @@ MACxus accede con il tuo account Microsoft, mostra la libreria (giochi acquistat
 
 Provato su una sola macchina (MacBook Pro M1 Max, macOS 27.2, CrossOver 26.3). Aspettati qualche spigolo.
 
-Funzionano finora: TUNIC, Deep Rock Galactic, Minecraft Dungeons II, Super Meat Boy 3D, Mad King Redemption, MARVEL Cosmic Invasion, Vampire Survivors. Halo funziona con glitch su M1; Forza Horizon 6 no.
+Funzionano finora: TUNIC, Deep Rock Galactic, Minecraft Dungeons II, Super Meat Boy 3D, Mad King Redemption, MARVEL Cosmic Invasion, Vampire Survivors e Space Marine 2 offline. Halo funziona con glitch su M1; Forza Horizon 6 no.
 
 **Elenco completo con motori e note: [Compatibilità dei giochi](docs/COMPATIBILITY.md#italiano).** Hai provato un gioco? [Invia un resoconto](https://github.com/fladnaG86/MACxus/issues/new?template=02-game-report.yml).
 

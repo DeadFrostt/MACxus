@@ -21,6 +21,7 @@ Risultati di prove reali. Un gioco che funziona su un Mac può comportarsi diver
 | Super Meat Boy 3D | ✅ | Highball | M1 Max · 0.3.11-mac.3 | |
 | TUNIC | ✅ | CrossOver | M1 Max · 0.3.11-mac.1 | Tested with keyboard. |
 | Vampire Survivors | ✅ | Highball | M1 Max · 0.3.11-mac.4 | |
+| Warhammer 40,000: Space Marine 2 | ✅ offline | Highball | M1 Max · 0.3.11-mac.5 | Easy Anti-Cheat: enable *Play offline without anti-cheat* in the game's settings; online multiplayer is not available. Tested with a DualSense (*DualSense compatibility mode* on). |
 | Halo: Campaign Evolved | ⚠️ | Highball | M1 Max · 0.3.11-mac.1 | Playable. Graphics glitches on M1 (hardware limit: 64-bit atomics); M2 or newer untested. Cutscenes need a video patch that is not shipped yet. No controller: the game uses GameInput, which Wine does not support yet. Best on M1: upscaler Native, motion blur off. |
 | Forza Horizon 6 | ❌ | Highball | M1 Max · 0.3.11-mac.1 | Reaches the main menu, then hangs after *Start game*. Same problem on Linux. |
 | Gears of War: E-Day | ❌ on M1 | Highball | M1 Max · 0.3.11-mac.2 | Requires hardware ray tracing, so it needs an M3 or newer (untested there). Easy Anti-Cheat: use *Play offline without anti-cheat* in the game's settings for the offline campaign only. |
@@ -46,6 +47,7 @@ Risultati di prove reali. Un gioco che funziona su un Mac può comportarsi diver
 | Super Meat Boy 3D | ✅ | Highball | M1 Max · 0.3.11-mac.3 | |
 | TUNIC | ✅ | CrossOver | M1 Max · 0.3.11-mac.1 | Provato con la tastiera. |
 | Vampire Survivors | ✅ | Highball | M1 Max · 0.3.11-mac.4 | |
+| Warhammer 40,000: Space Marine 2 | ✅ offline | Highball | M1 Max · 0.3.11-mac.5 | Easy Anti-Cheat: attiva *Gioca offline senza anti-cheat* nelle impostazioni del gioco; il multiplayer online non è disponibile. Provato con un DualSense (*Modalità compatibilità DualSense* attiva). |
 | Halo: Campaign Evolved | ⚠️ | Highball | M1 Max · 0.3.11-mac.1 | Giocabile. Glitch grafici su M1 (limite hardware: atomiche a 64 bit); M2 o successivi non provati. I filmati richiedono una patch video non ancora distribuita. Nessun controller: il gioco usa GameInput, che Wine non supporta ancora. Su M1: upscaler Nativo, motion blur disattivato. |
 | Forza Horizon 6 | ❌ | Highball | M1 Max · 0.3.11-mac.1 | Arriva al menu principale, poi si blocca dopo *Start game*. Stesso problema su Linux. |
 | Gears of War: E-Day | ❌ su M1 | Highball | M1 Max · 0.3.11-mac.2 | Richiede il ray tracing hardware, quindi serve un M3 o successivo (lì non provato). Easy Anti-Cheat: usa *Gioca offline senza anti-cheat* nelle impostazioni del gioco, solo per la campagna offline. |
