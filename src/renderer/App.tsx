@@ -992,7 +992,9 @@ export function FirstRunWizard({ data, toast }: { data: AppSnapshot; toast: (val
         <CircleAlert aria-hidden="true" />
         <div><h2 id="wizard-disclaimer-title">Independent, unofficial project</h2>
           <p>Xodus Nexus is built on Xodus, but it is <strong>not an official Xodus project</strong> and is not developed or maintained by the upstream Xodus developers.</p>
-          <p>Please report Nexus issues only in the <a href="https://github.com/domsvoboda/xodus-nexus/issues" target="_blank" rel="noopener noreferrer">Nexus repository</a>, not upstream. A problem in Nexus may not exist in upstream Xodus.</p>
+          {data.platform === 'darwin'
+            ? <p>MACxus is an independent macOS port of Xodus Nexus. Please report problems only in the <a href="https://github.com/fladnaG86/MACxus/issues" target="_blank" rel="noopener noreferrer">MACxus repository</a>, not to Xodus or Xodus Nexus: a problem on macOS may not exist on Linux.</p>
+            : <p>Please report Nexus issues only in the <a href="https://github.com/domsvoboda/xodus-nexus/issues" target="_blank" rel="noopener noreferrer">Nexus repository</a>, not upstream. A problem in Nexus may not exist in upstream Xodus.</p>}
         </div>
       </section>
       <p>Choose where games install. Everything else can be changed later in Settings.</p>

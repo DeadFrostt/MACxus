@@ -17,3 +17,11 @@ it('shows the upstream distinction and Nexus-only reporting before setup and sig
   expect(html).toMatch(/<input[^>]*data-gamepad-initial/);
   expect(html).toContain('Start using Xodus Nexus');
 });
+
+it('sends macOS users to the MACxus repository, not upstream Nexus', () => {
+  const html = renderToStaticMarkup(<FirstRunWizard data={{ ...demoSnapshot(), platform: 'darwin' }} toast={() => {}} />);
+  const notice = html.match(/<section class="wizard-disclaimer"[^>]*>[\s\S]*?<\/section>/)?.[0];
+  expect(notice).toContain('https://github.com/fladnaG86/MACxus/issues');
+  expect(notice).not.toContain('https://github.com/domsvoboda/xodus-nexus/issues');
+  expect(notice).toContain('macOS port of Xodus Nexus');
+});
