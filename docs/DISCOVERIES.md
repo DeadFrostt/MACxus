@@ -42,7 +42,10 @@ Wine exposes a DualSense as a raw HID device by default, which XInput games igno
 ### 11. Per-game profiles
 `assets/mac-profiles.json` holds declarative per-game settings (engine choice and whitelisted variables). Forza Horizon 6 uses Highball and reports an RTX 4070 to D3DMetal (`D3DM_VENDOR_ID` / `D3DM_DEVICE_ID`). The recipe comes from [highball-db](https://github.com/gauthierpiarrette/highball-db) (CC0).
 
-### 12. Smaller lessons
+### 12. External SSDs
+Most external SSDs are exFAT, which has no symbolic links, and installed games need them. MACxus therefore lets you put games on any APFS/HFS+ drive directly, and on exFAT/FAT/NTFS drives it creates an APFS sparse bundle (`MACxus.sparsebundle`) that grows only as needed. The image is re-attached at every start (without attaching it twice), free space is checked before downloads, and games on an unplugged drive are marked "Disco non collegato" instead of failing.
+
+### 13. Smaller lessons
 - Electron app + locally built backend: Keychain prompts come back after each rebuild unless the backend is signed with a stable identity. MACxus can sign it with a local "MACxus Local Signing" certificate; Developer ID signing is planned.
 - An APFS sparse bundle could get attached twice: fixed by checking existing attachments first.
 - Rosetta frames do not symbolize in macOS `sample`, so studying hangs needs Wine's own traces (`WINEDEBUG=+gdkc` for xgameruntime).
@@ -85,7 +88,10 @@ Di default Wine espone il DualSense come dispositivo HID grezzo, che i giochi XI
 ### 11. Profili per gioco
 `assets/mac-profiles.json` contiene impostazioni dichiarative per gioco (scelta del motore e variabili ammesse). Forza Horizon 6 usa Highball e si presenta a D3DMetal come una RTX 4070 (`D3DM_VENDOR_ID` / `D3DM_DEVICE_ID`). La ricetta viene da [highball-db](https://github.com/gauthierpiarrette/highball-db) (CC0).
 
-### 12. Lezioni minori
+### 12. SSD esterni
+La maggior parte degli SSD esterni è in exFAT, che non ha link simbolici, e i giochi installati ne hanno bisogno. MACxus permette quindi di mettere i giochi direttamente su qualsiasi disco APFS/HFS+, mentre sui dischi exFAT/FAT/NTFS crea uno sparse bundle APFS (`MACxus.sparsebundle`) che cresce solo quanto serve. L'immagine viene ricollegata a ogni avvio (senza montarla due volte), lo spazio libero è controllato prima dei download e i giochi su un disco scollegato vengono segnati "Disco non collegato" invece di fallire.
+
+### 13. Lezioni minori
 - App Electron + backend compilato in locale: le richieste del Portachiavi tornano dopo ogni ricompilazione, a meno che il backend non sia firmato con un'identità stabile. MACxus può firmarlo con un certificato locale "MACxus Local Signing"; la firma Developer ID è in programma.
 - Uno sparse bundle APFS poteva essere montato due volte: risolto controllando prima i montaggi esistenti.
 - I frame di Rosetta non vengono simbolizzati da `sample` di macOS, quindi per studiare i blocchi servono le trace di Wine (`WINEDEBUG=+gdkc` per xgameruntime).

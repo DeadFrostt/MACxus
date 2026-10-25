@@ -53,6 +53,15 @@ Tested on one machine only (MacBook Pro M1 Max, macOS 27.2, CrossOver 26.3). Exp
 5. **Settings → Motore Wine → Installa motore Highball** (recommended for D3D12 / Unreal games); otherwise CrossOver is used.
 6. Sign in, install a game, press **Play**. If macOS asks for Keychain access, choose **Always Allow**.
 
+### Games on an external SSD
+
+Short on internal disk space? Games can live on an external drive. In **Settings → Dove salvare i giochi** (also offered when you install a game) MACxus lists your disks with their free space:
+
+- **APFS or Mac OS Extended (HFS+) drive**: press **Scegli cartella** and pick a folder.
+- **exFAT / FAT / NTFS drive** (most SSDs come formatted this way): these cannot hold the symbolic links games need, so press **Crea immagine APFS**, choose a size in GB, and MACxus creates `MACxus.sparsebundle` on that drive. The image only takes the space actually used (up to the size you chose) and the drive keeps working with Windows/other devices.
+
+MACxus re-mounts the image every time it starts and checks the free space before each download. If the drive is unplugged, its games show **Disco non collegato** until you reconnect it. The Wine bottles and the launcher data stay on the internal disk (a few GB).
+
 For bug reports enable **Settings → Game logging** and attach `~/Library/Application Support/MACxus/logs/<id>-latest.log` (review it first).
 
 ### Controllers
@@ -98,6 +107,15 @@ Provato su una sola macchina (MacBook Pro M1 Max, macOS 27.2, CrossOver 26.3). A
 4. **Settings → Nexus runtime**: installa il runtime. MACxus sceglie la versione per cui sono state compilate le sue DLL patchate.
 5. **Settings → Motore Wine → Installa motore Highball** (consigliato per giochi D3D12 / Unreal); altrimenti si usa CrossOver.
 6. Accedi, installa un gioco, premi **Play**. Se macOS chiede l'accesso al Portachiavi, scegli **Consenti sempre**.
+
+### Giochi su SSD esterno
+
+Poco spazio sul disco interno? I giochi possono stare su un disco esterno. In **Settings → Dove salvare i giochi** (proposto anche quando installi un gioco) MACxus elenca i tuoi dischi con lo spazio libero:
+
+- **Disco APFS o Mac OS esteso (HFS+)**: premi **Scegli cartella** e scegli una cartella.
+- **Disco exFAT / FAT / NTFS** (la maggior parte degli SSD arriva formattata così): non supporta i link simbolici che servono ai giochi, quindi premi **Crea immagine APFS**, scegli una dimensione in GB e MACxus crea `MACxus.sparsebundle` su quel disco. L'immagine occupa solo lo spazio usato davvero (fino alla dimensione scelta) e il disco continua a funzionare con Windows e altri dispositivi.
+
+MACxus rimonta l'immagine a ogni avvio e controlla lo spazio libero prima di ogni download. Se il disco è scollegato, i suoi giochi mostrano **Disco non collegato** finché non lo ricolleghi. Le bottle Wine e i dati del launcher restano sul disco interno (qualche GB).
 
 Per segnalare un bug attiva **Settings → Game logging** e allega `~/Library/Application Support/MACxus/logs/<id>-latest.log` (rileggilo prima).
 
