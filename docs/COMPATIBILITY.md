@@ -1,0 +1,55 @@
+# Game compatibility / Compatibilità dei giochi
+
+**[English](#english)** · **[Italiano](#italiano)**
+
+Results from real tests. A game that works on one Mac may behave differently on another chip or engine. Tried a game? [Send a game report](https://github.com/fladnaG86/MACxus/issues/new?template=02-game-report.yml).
+
+Risultati di prove reali. Un gioco che funziona su un Mac può comportarsi diversamente con un altro chip o motore. Hai provato un gioco? [Invia un resoconto](https://github.com/fladnaG86/MACxus/issues/new?template=02-game-report.yml).
+
+---
+
+## English
+
+✅ Works · ⚠️ Works with issues · ❌ Doesn't work
+
+| Game | Status | Engine | Tested on | Notes |
+| --- | --- | --- | --- | --- |
+| Deep Rock Galactic | ✅ | CrossOver, Highball | M1 Max · 0.3.11-mac.1 | DirectX 12 through D3DMetal. |
+| Mad King Redemption | ✅ | Highball | M1 Max · 0.3.11-mac.2 | |
+| MARVEL Cosmic Invasion | ✅ | Highball | M1 Max · 0.3.11-mac.2 | |
+| Minecraft Dungeons II | ✅ | Highball | M1 Max · 0.3.11-mac.1 | Needs Highball. |
+| Super Meat Boy 3D | ✅ | Highball | M1 Max · 0.3.11-mac.3 | |
+| TUNIC | ✅ | CrossOver | M1 Max · 0.3.11-mac.1 | Tested with keyboard. |
+| Halo: Campaign Evolved | ⚠️ | Highball | M1 Max · 0.3.11-mac.1 | Playable. Graphics glitches on M1 (hardware limit: 64-bit atomics); M2 or newer untested. Cutscenes need a video patch that is not shipped yet. No controller: the game uses GameInput, which Wine does not support yet. Best on M1: upscaler Native, motion blur off. |
+| Forza Horizon 6 | ❌ | Highball | M1 Max · 0.3.11-mac.1 | Reaches the main menu, then hangs after *Start game*. Same problem on Linux. |
+| Gears of War: E-Day | ❌ on M1 | Highball | M1 Max · 0.3.11-mac.2 | Requires hardware ray tracing, so it needs an M3 or newer (untested there). Easy Anti-Cheat: use *Play offline without anti-cheat* in the game's settings for the offline campaign only. |
+| Call of Duty | ❌ | — | — | Kernel anti-cheat (Ricochet) cannot run on macOS. |
+
+**General limits**
+- Games with **kernel anti-cheat** don't work. Games with **Easy Anti-Cheat** can only run offline, with the option above.
+- Games that **require ray tracing** need an M3 or newer.
+- **Controllers:** Xbox controllers and DualSense work in XInput games (enable *DualSense compatibility mode* for a DualSense). Games that use GameInput don't see controllers yet.
+
+---
+
+## Italiano
+
+✅ Funziona · ⚠️ Funziona con problemi · ❌ Non funziona
+
+| Gioco | Stato | Motore | Provato su | Note |
+| --- | --- | --- | --- | --- |
+| Deep Rock Galactic | ✅ | CrossOver, Highball | M1 Max · 0.3.11-mac.1 | DirectX 12 tramite D3DMetal. |
+| Mad King Redemption | ✅ | Highball | M1 Max · 0.3.11-mac.2 | |
+| MARVEL Cosmic Invasion | ✅ | Highball | M1 Max · 0.3.11-mac.2 | |
+| Minecraft Dungeons II | ✅ | Highball | M1 Max · 0.3.11-mac.1 | Richiede Highball. |
+| Super Meat Boy 3D | ✅ | Highball | M1 Max · 0.3.11-mac.3 | |
+| TUNIC | ✅ | CrossOver | M1 Max · 0.3.11-mac.1 | Provato con la tastiera. |
+| Halo: Campaign Evolved | ⚠️ | Highball | M1 Max · 0.3.11-mac.1 | Giocabile. Glitch grafici su M1 (limite hardware: atomiche a 64 bit); M2 o successivi non provati. I filmati richiedono una patch video non ancora distribuita. Nessun controller: il gioco usa GameInput, che Wine non supporta ancora. Su M1: upscaler Nativo, motion blur disattivato. |
+| Forza Horizon 6 | ❌ | Highball | M1 Max · 0.3.11-mac.1 | Arriva al menu principale, poi si blocca dopo *Start game*. Stesso problema su Linux. |
+| Gears of War: E-Day | ❌ su M1 | Highball | M1 Max · 0.3.11-mac.2 | Richiede il ray tracing hardware, quindi serve un M3 o successivo (lì non provato). Easy Anti-Cheat: usa *Gioca offline senza anti-cheat* nelle impostazioni del gioco, solo per la campagna offline. |
+| Call of Duty | ❌ | — | — | L'anti-cheat a livello kernel (Ricochet) non può funzionare su macOS. |
+
+**Limiti generali**
+- I giochi con **anti-cheat a livello kernel** non funzionano. Quelli con **Easy Anti-Cheat** funzionano solo offline, con l'opzione indicata sopra.
+- I giochi che **richiedono il ray tracing** hanno bisogno di un M3 o successivo.
+- **Controller:** i controller Xbox e il DualSense funzionano nei giochi XInput (per il DualSense attiva *Modalità compatibilità DualSense*). I giochi che usano GameInput non vedono ancora i controller.

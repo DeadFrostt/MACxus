@@ -32,14 +32,9 @@ MACxus signs in with your Microsoft account, shows your library (owned and Game 
 
 Tested on one machine only (MacBook Pro M1 Max, macOS 27.2, CrossOver 26.3). Expect rough edges.
 
-| Game | Engine | Status |
-| --- | --- | --- |
-| TUNIC | CrossOver | ✅ Playable, sign-in and cloud saves OK. |
-| Deep Rock Galactic | Highball | ✅ Playable (D3D12 through D3DMetal), sign-in OK. |
-| Minecraft Dungeons II | Highball | ✅ Playable, online services OK. |
-| Halo: Campaign Evolved | Highball | ⚠️ Playable with graphics glitches on M1 (hardware limit, see Discoveries). Cutscenes need an extra video patch not yet shipped. |
-| Forza Horizon 6 | Highball (automatic profile) | ❌ Reaches the main menu, hangs after *Start game* (the same unresolved hang exists on Linux). |
-| Call of Duty | — | ❌ Kernel anti-cheat, will not work. |
+Working so far: TUNIC, Deep Rock Galactic, Minecraft Dungeons II, Super Meat Boy 3D, Mad King Redemption, MARVEL Cosmic Invasion. Halo works with M1 glitches; Forza Horizon 6 does not.
+
+**Full list with engines and notes: [Game compatibility](docs/COMPATIBILITY.md#english).** Tried a game? [Send a game report](https://github.com/fladnaG86/MACxus/issues/new?template=02-game-report.yml).
 
 ### Requirements
 
@@ -91,14 +86,9 @@ MACxus accede con il tuo account Microsoft, mostra la libreria (giochi acquistat
 
 Provato su una sola macchina (MacBook Pro M1 Max, macOS 27.2, CrossOver 26.3). Aspettati qualche spigolo.
 
-| Gioco | Motore | Stato |
-| --- | --- | --- |
-| TUNIC | CrossOver | ✅ Giocabile, login e salvataggi cloud OK. |
-| Deep Rock Galactic | Highball | ✅ Giocabile (D3D12 tramite D3DMetal), login OK. |
-| Minecraft Dungeons II | Highball | ✅ Giocabile, servizi online OK. |
-| Halo: Campaign Evolved | Highball | ⚠️ Giocabile con glitch grafici su M1 (limite hardware, vedi Scoperte). I filmati richiedono una patch video non ancora distribuita. |
-| Forza Horizon 6 | Highball (profilo automatico) | ❌ Arriva al menu, si blocca dopo *Start game* (lo stesso blocco irrisolto c'è anche su Linux). |
-| Call of Duty | — | ❌ Anti-cheat a livello kernel, non funzionerà. |
+Funzionano finora: TUNIC, Deep Rock Galactic, Minecraft Dungeons II, Super Meat Boy 3D, Mad King Redemption, MARVEL Cosmic Invasion. Halo funziona con glitch su M1; Forza Horizon 6 no.
+
+**Elenco completo con motori e note: [Compatibilità dei giochi](docs/COMPATIBILITY.md#italiano).** Hai provato un gioco? [Invia un resoconto](https://github.com/fladnaG86/MACxus/issues/new?template=02-game-report.yml).
 
 ### Requisiti
 

@@ -1,0 +1,68 @@
+name: Game report / Resoconto di un gioco
+description: Tell us how a game runs on your Mac, for the compatibility list. / Racconta come gira un gioco sul tuo Mac, per l'elenco di compatibilità.
+labels: [compatibility]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! Reports are added to [docs/COMPATIBILITY.md](https://github.com/fladnaG86/MACxus/blob/main/docs/COMPATIBILITY.md). Never attach account tokens, Keychain contents or game files.
+        Grazie! I resoconti vengono aggiunti a [docs/COMPATIBILITY.md](https://github.com/fladnaG86/MACxus/blob/main/docs/COMPATIBILITY.md). Non allegare mai token dell'account, contenuti del Portachiavi o file dei giochi.
+  - type: input
+    id: game
+    attributes:
+      label: Game (and Store ID if known) / Gioco (e Store ID se noto)
+      placeholder: Deep Rock Galactic (9NHFVWX1V7QJ)
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result / Risultato
+      options:
+        - Works / Funziona
+        - Works with issues / Funziona con problemi
+        - Starts but crashes or hangs / Parte ma si chiude o si blocca
+        - Does not start / Non parte
+    validations:
+      required: true
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Wine engine / Motore Wine
+      options: [Highball, CrossOver, Not sure / Non so]
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: Mac model, chip and macOS version / Modello Mac, chip e versione macOS
+      placeholder: MacBook Pro M1 Max, macOS 27.2
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: MACxus and CrossOver versions / Versioni di MACxus e CrossOver
+      placeholder: MACxus 0.3.11-mac.4, CrossOver 26.3
+    validations:
+      required: true
+  - type: dropdown
+    id: input
+    attributes:
+      label: Controls tested / Controlli provati
+      options:
+        - Keyboard and mouse / Tastiera e mouse
+        - Xbox controller / Controller Xbox
+        - DualSense / DualShock
+        - Not tested / Non provati
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes / Note
+      description: Settings that helped, glitches, performance, what does not work. / Impostazioni utili, glitch, prestazioni, cosa non funziona.
+  - type: textarea
+    id: log
+    attributes:
+      label: Launch log (optional) / Log di avvio (facoltativo)
+      description: Only if something fails. ~/Library/Application Support/MACxus/logs/<id>-latest.log with Verbose logs enabled in Settings. Review it before posting. / Solo se qualcosa non va. Attiva i log dettagliati in Impostazioni e rileggilo prima di pubblicarlo.
+      render: text

@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Discussions (questions, compatibility reports / domande, report di compatibilità)
+  - name: Discussions (questions and ideas / domande e idee)
     url: https://github.com/fladnaG86/MACxus/discussions
-    about: Share what works on your Mac. / Racconta cosa funziona sul tuo Mac.
+    about: Ask a question or share an idea. For game results use "Game report". / Fai una domanda o proponi un'idea. Per i risultati dei giochi usa "Resoconto di un gioco".

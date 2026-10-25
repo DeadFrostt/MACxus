@@ -12,7 +12,7 @@ test('MACxus issue chooser routes discussions to this fork and retains its macOS
   const config = await read('config');
   // This fork deliberately permits blank issues as well as its macOS form.
   assert.equal(config.blank_issues_enabled, true);
-  assert.deepEqual((await fs.readdir(directory)).sort(), ['01-macos-problem.yml', 'config.yml']);
+  assert.deepEqual((await fs.readdir(directory)).sort(), ['01-macos-problem.yml', '02-game-report.yml', 'config.yml']);
   for (const link of config.contact_links) {
     assert.ok(link.name && link.about);
     const url = new URL(link.url);
@@ -21,9 +21,9 @@ test('MACxus issue chooser routes discussions to this fork and retains its macOS
   }
 });
 
-test('macOS issue form uses valid fields without prefilled answers or duplicate identifiers', async () => {
-  const form = await read('01-macos-problem');
-  assert.ok(form.name && form.description && form.labels.includes('bug'));
+for (const [name, label] of [['01-macos-problem', 'bug'], ['02-game-report', 'compatibility']]) test(`${name} form uses valid fields without prefilled answers or duplicate identifiers`, async () => {
+  const form = await read(name);
+  assert.ok(form.name && form.description && form.labels.includes(label));
   const allowed = new Set(['markdown', 'input', 'textarea', 'dropdown']);
   const ids = new Set(), labels = new Set();
   for (const field of form.body) {
@@ -41,6 +41,18 @@ test('macOS issue form uses valid fields without prefilled answers or duplicate 
       assert.equal(field.attributes.default, undefined);
     }
   }
+});
+
+test('game report requires game, result, engine, Mac and versions, links the compatibility list and keeps logs optional', async () => {
+  const form = await read('02-game-report'), items = fields(form);
+  for (const [id, type] of [['game', 'input'], ['result', 'dropdown'], ['engine', 'dropdown'], ['mac', 'input'], ['versions', 'input']]) {
+    assert.equal(items.get(id).type, type);
+    assert.equal(items.get(id).validations.required, true);
+  }
+  assert.deepEqual(items.get('engine').attributes.options.slice(0, 2), ['Highball', 'CrossOver']);
+  assert.notEqual(items.get('log').validations?.required, true);
+  const text = JSON.stringify(form);
+  for (const guidance of ['docs/COMPATIBILITY.md', 'Keychain', 'tokens', 'game files', 'Review it before posting']) assert.ok(text.includes(guidance), guidance);
 });
 
 test('macOS report requires engine, Mac/system details and reproduction, with optional logs and privacy guidance', async () => {
