@@ -8,9 +8,12 @@ const execute = (tool, args) => execFileSync(tool, args, { encoding: 'utf8', std
 export function resolveMacSigningIdentity(requested, run = execute) {
   const selector = requested?.trim();
   if (!selector) return null;
-  const output = run('security', ['find-identity', '-v', '-p', 'codesigning']);
-  const identities = [...output.matchAll(/^\s*\d+\)\s+([a-f\d]{40})\s+"(.*)"\s*$/gim)]
-    .map(match => ({ hash: match[1].toUpperCase(), name: match[2] }));
+  // No -v: a self-signed root such as "MACxus Local Signing" is reported as
+  // CSSMERR_TP_NOT_TRUSTED yet still signs. That listing repeats identities, so
+  // match each certificate once by fingerprint.
+  const output = run('security', ['find-identity', '-p', 'codesigning']);
+  const identities = [...new Map([...output.matchAll(/^\s*\d+\)\s+([a-f\d]{40})\s+"(.*?)"(?:\s+\([^)]*\))?\s*$/gim)]
+    .map(match => [match[1].toUpperCase(), { hash: match[1].toUpperCase(), name: match[2] }])).values()];
   const matches = identities.filter(item => item.hash === selector.toUpperCase() || item.name === selector);
   if (matches.length !== 1) throw Error('MACXUS_SIGNING_IDENTITY must match exactly one valid code-signing identity in the build Keychain. Use its SHA-1 fingerprint to disambiguate.');
   return matches[0].hash;

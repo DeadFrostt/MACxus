@@ -16,7 +16,7 @@ test('default ad-hoc builds never inspect the Keychain or re-sign binaries', () 
 test('explicit certificate selection is exact, unique and bound to its fingerprint', () => {
   const run = (command, args) => {
     assert.equal(command, 'security');
-    assert.deepEqual(args, ['find-identity', '-v', '-p', 'codesigning']);
+    assert.deepEqual(args, ['find-identity', '-p', 'codesigning']);
     return listing;
   };
   assert.equal(resolveMacSigningIdentity('Developer ID Application: Fixture (TEAM)', run), fingerprint);
@@ -24,6 +24,12 @@ test('explicit certificate selection is exact, unique and bound to its fingerpri
   assert.throws(() => resolveMacSigningIdentity('Fixture', run), /exactly one/);
   assert.throws(() => resolveMacSigningIdentity('missing', run), /exactly one/);
   assert.throws(() => resolveMacSigningIdentity('Other', () => listing + `\n  3) ${'EF'.repeat(20)} "Other"`), /disambiguate/);
+});
+
+test('an untrusted self-signed certificate listed twice is still one exact identity', () => {
+  const selfSigned = '22'.repeat(20);
+  const untrusted = `Policy: Code Signing\n  Matching identities\n  1) ${selfSigned} "MACxus Local Signing" (CSSMERR_TP_NOT_TRUSTED)\n     1 identities found\n\n  Valid identities only\n     0 valid identities found`;
+  assert.equal(resolveMacSigningIdentity('MACxus Local Signing', () => untrusted + `\n  2) ${selfSigned} "MACxus Local Signing" (CSSMERR_TP_NOT_TRUSTED)`), selfSigned);
 });
 
 test('both shipping binaries receive stable identifiers and are verified against the selected certificate', () => {
