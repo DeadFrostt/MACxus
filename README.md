@@ -50,6 +50,8 @@ Tested on one machine only (MacBook Pro M1 Max, macOS 27.2, CrossOver 26.3). Exp
 
 ### Install
 
+**New to Mac or to Terminal?** Follow the step-by-step [Getting started guide](docs/GETTING-STARTED.md#english): every command is ready to copy and paste.
+
 1. Download `MACxus-…-arm64.dmg` from [Releases](https://github.com/fladnaG86/MACxus/releases) and drag MACxus to Applications.
 2. The beta is **not signed**: the first time, right-click MACxus → **Open**, or run `xattr -dr com.apple.quarantine /Applications/MACxus.app`.
 3. **Settings → Xodus backend → Compila il backend** (Rust builds it locally, a few minutes).
@@ -104,6 +106,8 @@ Provato su una sola macchina (MacBook Pro M1 Max, macOS 27.2, CrossOver 26.3). A
 - Un account Microsoft che possiede il gioco o ha PC Game Pass.
 
 ### Installazione
+
+**Nuovo sul Mac o sul Terminale?** Segui la [guida passo per passo](docs/GETTING-STARTED.md#italiano): ogni comando è pronto da copiare e incollare.
 
 1. Scarica `MACxus-…-arm64.dmg` da [Releases](https://github.com/fladnaG86/MACxus/releases) e trascina MACxus in Applicazioni.
 2. La beta **non è firmata**: la prima volta tasto destro su MACxus → **Apri**, oppure `xattr -dr com.apple.quarantine /Applications/MACxus.app`.
