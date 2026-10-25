@@ -251,7 +251,7 @@ export function highballWrapperScript(engineRoot: string, appleGptkRoot: string,
   const gstreamerLib = path.join(frameworksDir, 'GStreamer.framework', 'Versions', '1.0', 'lib');
   const libraryPath = shellQuote(`${externalDir}:${frameworksDir}:${gstreamerLib}:${crossOverLib64}:`);
   const frameworkPath = shellQuote(`${externalDir}:${frameworksDir}:`);
-  const defaults = Object.fromEntries(safeEnvironment({ WINEMSYNC: '1', WINEESYNC: '0', ...extraEnv }));
+  const defaults = Object.fromEntries(safeEnvironment({ WINEMSYNC: '1', WINEESYNC: '0', ROSETTA_ADVERTISE_AVX: '1', ...extraEnv }));
   return [
     '#!/bin/sh',
     `export WINEPREFIX=${shellQuote(prefix)}`,
@@ -265,6 +265,8 @@ export function highballWrapperScript(engineRoot: string, appleGptkRoot: string,
     `export GST_REGISTRY=${shellQuote(path.join(prefix, '.gstreamer-registry.x86_64.bin'))}`,
     // Values match SAFE_ENV_VALUE, so they cannot break out of the double quotes.
     ...Object.entries(defaults).map(([key, value]) => `export ${key}="\${${key}:-${value}}"`),
+    // Like CrossOver's wine script: Rosetta advertises AVX for any value, so 0 must unset it.
+    'if [ "$ROSETTA_ADVERTISE_AVX" = 0 ]; then unset ROSETTA_ADVERTISE_AVX; fi',
     'if [ "${1:-}" = "--nexus-stop-prefix" ]; then',
     `  exec ${wineserver} -k`,
     'fi',

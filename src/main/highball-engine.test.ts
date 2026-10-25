@@ -271,6 +271,11 @@ describe('highballWrapperScript', () => {
     expect(script).toContain(`export D3DM_DEVICE_DESCRIPTION="\${D3DM_DEVICE_DESCRIPTION:-NVIDIA GeForce RTX 4070}"`);
   });
 
+  it('advertises AVX under Rosetta by default like CrossOver, and 0 unsets it', () => {
+    expect(script).toContain(`export ROSETTA_ADVERTISE_AVX="\${ROSETTA_ADVERTISE_AVX:-1}"`);
+    expect(script).toContain('if [ "$ROSETTA_ADVERTISE_AVX" = 0 ]; then unset ROSETTA_ADVERTISE_AVX; fi');
+  });
+
   it('launches with the engine wine, waits on wineserver and has a stop branch', () => {
     expect(script).toContain('if [ "${1:-}" = "--nexus-stop-prefix" ]; then');
     expect(script).toContain("  exec '/Data Root/engine root/engine/bin/wineserver' -k");
