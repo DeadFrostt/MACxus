@@ -1,5 +1,5 @@
-blank_issues_enabled: false
+blank_issues_enabled: true
 contact_links:
-  - name: Setup guide and troubleshooting
-    url: https://github.com/domsvoboda/xodus-nexus/wiki/Getting-started
-    about: Check installation instructions and requirements before reporting a problem.
+  - name: Discussions (questions, compatibility reports / domande, report di compatibilità)
+    url: https://github.com/fladnaG86/MACxus/discussions
+    about: Share what works on your Mac. / Racconta cosa funziona sul tuo Mac.

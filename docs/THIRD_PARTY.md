@@ -19,3 +19,25 @@ the user's own CrossOver installation.
 The per-game launch profiles in `assets/mac-profiles.json` (for example the
 Forza Horizon 6 D3DMetal GPU identity and msync settings) come from the
 highball-db recipes, dedicated to the public domain under CC0 1.0.
+
+## Bundled runtime DLLs — LGPL-2.1-or-later
+
+`assets/mac-runtime-dlls` contains PE builds of `xgameruntime.dll`, `windows.web.dll`,
+`twinapi.appcore.dll`, `gamingtcui.dll` and `winhttp.dll` from the Xodus Nexus runtime release
+`runtime-11.0-20261022-gf4adc821` (Wine 11.0 sources, LGPL-2.1-or-later; xgameruntime from
+<https://github.com/xodus-gaming/xgameruntime>, LGPL-2.1), modified by the patches in
+`assets/runtime-patches`. The corresponding source is that runtime release plus those patches;
+rebuild steps are in `assets/mac-runtime-dlls/README.md`.
+
+## Sikarugir runtime frameworks
+
+When the Highball engine is installed, MACxus downloads the GLib/GStreamer frameworks from the
+Sikarugir template release (<https://github.com/Sikarugir-App/Template>, `Template-1.0.11.tar.xz`,
+pinned SHA-256). They are not bundled.
+
+## winevideo patches
+
+`assets/runtime-patches/highball-wine-mf-software-output.patch` contains patches 0004, 0005 and
+0007 from <https://github.com/Jfishin/winevideo>, which modify Wine (LGPL-2.1-or-later). The
+repository has no license file; DLLs built from it are not distributed until the author confirms
+the license.

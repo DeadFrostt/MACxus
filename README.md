@@ -1,177 +1,119 @@
 <div align="center">
 
-<img src="assets/icon.png" width="96" alt="Xodus Nexus" />
+<img src="assets/icon.png" width="96" alt="MACxus" />
 
-# Xodus Nexus
+# MACxus
 
-Your Microsoft Store PC games, on Linux.
+Your Microsoft Store / PC Game Pass games, on Apple Silicon Macs.<br>
+I tuoi giochi PC del Microsoft Store / PC Game Pass, sui Mac Apple Silicon.
 
-[![CI](https://github.com/domsvoboda/xodus-nexus/actions/workflows/ci.yml/badge.svg)](https://github.com/domsvoboda/xodus-nexus/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+**[English](#english)** · **[Italiano](#italiano)** · [Discoveries / Scoperte](docs/DISCOVERIES.md)
 
 </div>
 
 > [!CAUTION]
-> **Xodus Nexus is an independent, unofficial project built on Xodus. It is not an official project or release from the upstream Xodus developers.**
+> MACxus is an independent, unofficial macOS port of [Xodus Nexus](https://github.com/domsvoboda/xodus-nexus), which is built on [Xodus](https://github.com/xodus-gaming/xodus). It is **not** made by the Xodus or Xodus Nexus developers, and it is not affiliated with Microsoft, Xbox, Apple or CodeWeavers. Report MACxus problems **only** [here](https://github.com/fladnaG86/MACxus/issues).
 >
-> Please report all issues encountered with **Xodus Nexus** only in the [Xodus Nexus repository](https://github.com/domsvoboda/xodus-nexus/issues), not in the upstream Xodus issue tracker or support channels.
->
-> Nexus includes its own changes, so a problem in Nexus does not necessarily indicate a problem in upstream Xodus.
+> MACxus è un port macOS indipendente e non ufficiale di [Xodus Nexus](https://github.com/domsvoboda/xodus-nexus), basato su [Xodus](https://github.com/xodus-gaming/xodus). **Non** è fatto dagli sviluppatori di Xodus o Xodus Nexus e non è affiliato a Microsoft, Xbox, Apple o CodeWeavers. Segnala i problemi di MACxus **solo** [qui](https://github.com/fladnaG86/MACxus/issues).
 
-An Xbox-inspired launcher built on [Xodus](https://github.com/xodus-gaming/xodus),
-using our patched Nexus backend and Nexus runtime.
-Browse the Store, install games you own or can access through a subscription,
-and play with one shared runtime. Xbox sign-in and cloud saves are available
-for supported games.
+---
 
-![Xodus Nexus demo](docs/screenshots/demo.gif?v=c2c5cd4c)
+## English
 
-*Preview with sample account data.*
+MACxus signs in with your Microsoft account, shows your library (owned and Game Pass games), downloads games and launches them with Wine on macOS, with Xbox sign-in and cloud saves for supported titles. No game files are included: you need a valid purchase or subscription.
 
-## Install
+### Status: beta
 
-Download the latest x86_64 Linux AppImage from [Releases](https://github.com/domsvoboda/xodus-nexus/releases), make it executable and open it.
+Tested on one machine only (MacBook Pro M1 Max, macOS 27.2, CrossOver 26.3). Expect rough edges.
 
-For an application-menu installation on supported distributions:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/domsvoboda/xodus-nexus/main/scripts/install.sh | bash
-```
-
-In **Settings**, install the **Nexus backend** and **Nexus runtime**, then sign in
-with your Microsoft account. A valid game purchase or subscription is required.
-
-If passkey sign-in gets stuck, choose **Continue in browser** in the sign-in
-window. This option requires Google Chrome, either a native installation or the
-Flatpak version available through Discover. Other browsers are not supported.
-
-[Setup guide and SteamOS requirements](https://github.com/domsvoboda/xodus-nexus/wiki/Getting-started)
-
-## Use
-
-- **My Library** combines owned, Game Pass and installed games, with Access, Play state and title filters.
-- Open a game for its description, categories, screenshot gallery and available Xbox achievements, time played and last activity. Xbox data depends on the account and game.
-- **Store** lets you browse and install supported PC games.
-- **Manage content** installs licensed add-ons and campaign packages.
-- **Install Queue** downloads games one at a time and lets you add more while downloading or playing another game. Pause and resume are supported, including manual resume after restarting the launcher.
-- Cancelling a new installation can keep or delete its partial files. Existing games, updates and DLC keep their files.
-- Right-click an installed game for settings, VC++ prerequisites, shortcuts or removal.
-- Removing a game can keep its files or permanently delete its installation folder without using Trash. Saves inside that folder are deleted too; saves elsewhere are not affected.
-- Game settings offer an optional **DualSense compatibility mode** if a standard DualSense is not detected. It applies only to that game and may disable advanced haptics and adaptive triggers.
-- Choose **Add to Steam** in the game menu, or **Add Nexus to Steam** in Settings, to create a Non-Steam shortcut with available artwork. Steam can stay running, including in Game Mode. Requires native Linux Steam; Flatpak Steam is not yet supported.
-- Update the launcher, backend and runtime in **Settings**.
-- **Settings → Downloads** sets a combined game download speed limit in MiB/s (0 means unlimited). A supporting Nexus backend is required; saving the limit also applies it to active downloads.
-- For account, library or installation errors, use **Settings → Xodus backend → Open backend diagnostic log**. The local log contains safe error codes and operation results, not credentials. Review it before sharing.
-
-## Wallet setup and unlocking
-
-- If the service is stopped, use **Start service**. Supported KDE wallets should also start automatically when Nexus opens in Game Mode.
-- If your wallet has a password, its native unlock window may appear. Enter your **wallet password**, which is not necessarily your Microsoft account password. Nexus does not receive this password.
-- A wallet without a password should unlock without requiring password entry.
-- If no wallet exists, use **Create wallet** and complete the system dialog. On KDE, choose **Classic, blowfish encrypted file** for a normal password-based wallet if you do not have a GPG encryption key. An empty password does not protect stored credentials.
-- If setup or the password dialog does not work in Game Mode, try it in Desktop Mode first. If the problem persists, include the backend diagnostic log in your issue report.
-
-[Documentation](https://github.com/domsvoboda/xodus-nexus/wiki) ·
-[Report an issue](https://github.com/domsvoboda/xodus-nexus/issues)
-
-## How it works
-
-| Component | Role |
-| --- | --- |
-| Xodus Nexus | Store browsing, library, installation queue and launch controls. |
-| Nexus backend | Patched build of [Xodus](https://github.com/xodus-gaming/xodus) for account sign-in, license checks, package downloads and launch preparation. |
-| Nexus runtime | Built on [Xodus Proton](https://github.com/xodus-gaming/Proton) and [Xodus XGameRuntime](https://github.com/xodus-gaming/xgameruntime), with additional Nexus compatibility patches. |
-
-Every game uses the same launch path and shared runtime.
-
-## Compatible games
-
-These results come from manual testing and user reports. Other games may work,
-but have not been verified and may encounter compatibility issues.
-
-| Game | Playable | Status |
+| Game | Engine | Status |
 | --- | --- | --- |
-| Gears of War: E-Day | Yes | Playable online. |
-| Deep Rock Galactic | Yes | Playable online. |
-| Minecraft Dungeons | Yes | Playable online with launcher 0.3.5; [ownership failures](https://github.com/domsvoboda/xodus-nexus/issues/80) also reported on other setups. |
-| Minecraft Dungeons II | Yes | Playable online. |
-| Minecraft for Windows | Yes | Playable online. |
-| Minecraft Launcher | Yes | Sign-in and Java download/startup work with launcher 0.3.5; Java online unverified. [Login failure](https://github.com/domsvoboda/xodus-nexus/issues/107) also reported on another setup. |
-| No Man's Sky | Yes | Playable online. |
-| Valor Mortis | Yes | Fully playable. |
-| Forza Horizon 6 | Yes | Playable online; some setups need [VC++ prerequisites](https://github.com/domsvoboda/xodus-nexus/issues/96). [Loading failures](https://github.com/domsvoboda/xodus-nexus/issues/13) also reported. |
-| Palworld | Yes | Playable online. |
-| DOOM Eternal | Yes | Playable. |
-| DOOM: The Dark Ages | Yes | Playable (user report). |
-| Fallout 76 | Yes | Playable online; [one reported setup](https://github.com/domsvoboda/xodus-nexus/issues/9#issuecomment-6227548598) requires gamescope to display correctly. |
-| The Outer Worlds 2 | Yes | Playable. |
-| Wolfenstein: The Old Blood | Yes | Playable. |
-| Wasteland Remastered | Yes | Playable. |
-| Danganronpa 2 | Yes | Playable. |
-| Neon Abyss 2 | Yes | Playable. |
-| Hollow Knight: Voidheart Edition | Yes | Playable. |
-| Avowed | Yes | Playable. |
-| Mortal Shell: Enhanced Edition | Yes | Playable (user report). |
-| Sea of Thieves | Yes | Playable online. |
-| Tony Hawk's Pro Skater 3 + 4 | Partial | Solo playable; Private Match loads a map. Joining other players and public matchmaking remain unconfirmed. ([#88](https://github.com/domsvoboda/xodus-nexus/issues/88)) |
-| ARC Raiders | No | Launches but cannot connect to online services. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/100)) |
-| Hogwarts Legacy | Yes | Playable. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/110)) |
-| Halo: Campaign Evolved | Yes | Playable; may remain running after quitting. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/97)) |
-| Resonance: A Plague Tale Legacy | Yes | Playable; black screen reported when ending a game on Steam Deck. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
-| Resident Evil 2 | Yes | Playable; may remain running after quitting. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/110)) |
-| Wreckfest | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
-| TUNIC | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
-| Hades | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
-| Hell Let Loose: Vietnam | No | Crashes after Easy Anti-Cheat initialization on Arch Linux with an Arc A770. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
-| Human: Fall Flat | Partial | Public online game search fails. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
-| Wolfenstein II: The New Colossus | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
-| The Dungeon of Naheulbeuk: The Amulet of Chaos | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
-| Soul Hackers 2 | Yes | Playable with launcher 0.3.8 (user report, [#166](https://github.com/domsvoboda/xodus-nexus/issues/166#issuecomment-6285236638)). |
-| Monster Boy and the Cursed Kingdom | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
-| Hollow Knight: Silksong | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
-| Teenage Mutant Ninja Turtles: Shredder's Revenge | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
-| DRAGON QUEST XI S: Echoes of an Elusive Age - Definitive Edition | No | Crashes after the first loading screen. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
-| ACA NEOGEO METAL SLUG | No | Crashes at launch. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
-| SIGNALIS | Yes | Playable. ([user report](https://docs.google.com/spreadsheets/d/1HD8fr8XotC2o0seA5TRaiZ3TeltdyUv5aWhxSPeD-6s/edit?usp=sharing)) |
-| DREDGE | Yes | Playable. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/106)) |
-| Warhammer 40,000: Space Marine 2 | Yes | Playable; online unverified. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/106)) |
-| Indiana Jones and the Great Circle | Yes | First mission playable. ([#78](https://github.com/domsvoboda/xodus-nexus/issues/78)) |
-| Microsoft Jewel | No | Crashes at launch. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
-| Microsoft Bubble | No | Crashes at launch. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
-| AI: THE SOMNIUM FILES - nirvanA Initiative | Yes | Playable; Store ID detection issue reported. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
-| Minecraft Legends | Yes | Playable; an online session starts, but play with friends is unverified. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
-| The Elder Scrolls: Arena | No | Crashes at launch. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
-| The Elder Scrolls II: Daggerfall | No | Crashes at launch. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
-| Wolfenstein: Enemy Territory | Partial | Playable, but cannot join PunkBuster-enabled servers. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/107)) |
-| Hell Let Loose | No | Crashes at startup. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/105)) |
-| Kingdom Come: Deliverance II | Yes | Playable. ([#112](https://github.com/domsvoboda/xodus-nexus/issues/112)) |
-| PAC-MAN MUSEUM+ | No | Stops after the opening logos. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/61)) |
-| Farming Simulator 25 | No | Startup failure reported; updated runtime retest pending. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/62)) |
-| PowerWash Simulator 2 | Yes | Playable. ([#69](https://github.com/domsvoboda/xodus-nexus/issues/69)) |
-| Young Souls | Unverified | Launches in Steam Deck Desktop Mode; gameplay unverified. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/8#issuecomment-6225913594)) |
-| Remnant II | Unverified | Starts and exits cleanly; gameplay and online were not detailed. ([user report](https://github.com/domsvoboda/xodus-nexus/issues/34#issuecomment-6190973665)) |
-| The Witcher 3 | No | Currently crashes on launch. |
-| LIMBO | Yes | Playable. |
-| World War Z | Partial | Connects to online services and starts Quick Match search; joining a match is unverified. |
-| Balatro | Yes | Playable. |
+| TUNIC | CrossOver | ✅ Playable, sign-in and cloud saves OK. |
+| Deep Rock Galactic | Highball | ✅ Playable (D3D12 through D3DMetal), sign-in OK. |
+| Minecraft Dungeons II | Highball | ✅ Playable, online services OK. |
+| Halo: Campaign Evolved | Highball | ⚠️ Playable with graphics glitches on M1 (hardware limit, see Discoveries). Cutscenes need an extra video patch not yet shipped. |
+| Forza Horizon 6 | Highball (automatic profile) | ❌ Reaches the main menu, hangs after *Start game* (the same unresolved hang exists on Linux). |
+| Call of Duty | — | ❌ Kernel anti-cheat, will not work. |
 
-[Full compatibility list](https://github.com/domsvoboda/xodus-nexus/wiki/Compatibility)
+### Requirements
 
-User reports describe individual setups, not universal compatibility. The wiki
-links to report sources and the community spreadsheet. Launch-only reports do
-not confirm gameplay or online support.
+- Apple Silicon Mac with **Rosetta 2** (`softwareupdate --install-rosetta`).
+- **[CrossOver](https://www.codeweavers.com/crossover) 26.x** in `/Applications`: it provides D3DMetal and libraries used by both engines (paid software with a free trial).
+- To build the backend once: **Git**, **Rust** (`rustup`) and **protoc** (`brew install protobuf`).
+- A Microsoft account that owns the game or has PC Game Pass.
 
-## Screenshots
+### Install
 
-[Library](docs/screenshots/demo-library.png) ·
-[Store](docs/screenshots/demo-store.png) ·
-[Install queue](docs/screenshots/demo-downloads.png) ·
-[Settings](docs/screenshots/demo-settings.png)
+1. Download `MACxus-…-arm64.dmg` from [Releases](https://github.com/fladnaG86/MACxus/releases) and drag MACxus to Applications.
+2. The beta is **not signed**: the first time, right-click MACxus → **Open**, or run `xattr -dr com.apple.quarantine /Applications/MACxus.app`.
+3. **Settings → Xodus backend → Compila il backend** (Rust builds it locally, a few minutes).
+4. **Settings → Nexus runtime**: install the runtime. MACxus picks the release its patched DLLs were built for.
+5. **Settings → Motore Wine → Installa motore Highball** (recommended for D3D12 / Unreal games); otherwise CrossOver is used.
+6. Sign in, install a game, press **Play**. If macOS asks for Keychain access, choose **Always Allow**.
 
-Independent project, not affiliated with Microsoft or Xbox. A valid game license
-is required. Launcher: [MIT license](LICENSE). The separate Xodus backend retains
-its upstream GPLv3 license and ships with corresponding source.
-The Nexus runtime includes [FFmpeg](https://ffmpeg.org/) shared libraries under
-LGPL 2.1 or later; its corresponding pinned source and build recipe accompany
-each runtime release.
-[Contributing](CONTRIBUTING.md)
+For bug reports enable **Settings → Game logging** and attach `~/Library/Application Support/MACxus/logs/<id>-latest.log` (review it first).
+
+### Controllers
+
+- **DualSense / DualShock**: open the game's settings and enable **DualSense compatibility mode**. The pad is then presented as an Xbox (XInput) controller; haptics and adaptive triggers are not available in this mode.
+- Games that read input through **GameInput** (for example Halo: Campaign Evolved) do not see any controller yet: Wine's GameInput is still a stub.
+
+### What is different from Xodus Nexus
+
+Everything macOS-specific is documented in [docs/DISCOVERIES.md](docs/DISCOVERIES.md): RAM-disk launch overlay instead of `WINE_DLL_FILE_MAP`, loopback bridge to the account service, Highball engine support, the `%gs:0x68` last-error fix, patched runtime DLLs shipped in the app (`assets/mac-runtime-dlls`, patches in `assets/runtime-patches`), DualSense handling and per-game profiles.
+
+---
+
+## Italiano
+
+MACxus accede con il tuo account Microsoft, mostra la libreria (giochi acquistati e Game Pass), scarica i giochi e li avvia con Wine su macOS, con login Xbox e salvataggi cloud per i titoli supportati. Nessun file di gioco è incluso: serve un acquisto o un abbonamento valido.
+
+### Stato: beta
+
+Provato su una sola macchina (MacBook Pro M1 Max, macOS 27.2, CrossOver 26.3). Aspettati qualche spigolo.
+
+| Gioco | Motore | Stato |
+| --- | --- | --- |
+| TUNIC | CrossOver | ✅ Giocabile, login e salvataggi cloud OK. |
+| Deep Rock Galactic | Highball | ✅ Giocabile (D3D12 tramite D3DMetal), login OK. |
+| Minecraft Dungeons II | Highball | ✅ Giocabile, servizi online OK. |
+| Halo: Campaign Evolved | Highball | ⚠️ Giocabile con glitch grafici su M1 (limite hardware, vedi Scoperte). I filmati richiedono una patch video non ancora distribuita. |
+| Forza Horizon 6 | Highball (profilo automatico) | ❌ Arriva al menu, si blocca dopo *Start game* (lo stesso blocco irrisolto c'è anche su Linux). |
+| Call of Duty | — | ❌ Anti-cheat a livello kernel, non funzionerà. |
+
+### Requisiti
+
+- Mac Apple Silicon con **Rosetta 2** (`softwareupdate --install-rosetta`).
+- **[CrossOver](https://www.codeweavers.com/crossover) 26.x** in Applicazioni: fornisce D3DMetal e librerie usate da entrambi i motori (a pagamento, con prova gratuita).
+- Per compilare il backend la prima volta: **Git**, **Rust** (`rustup`) e **protoc** (`brew install protobuf`).
+- Un account Microsoft che possiede il gioco o ha PC Game Pass.
+
+### Installazione
+
+1. Scarica `MACxus-…-arm64.dmg` da [Releases](https://github.com/fladnaG86/MACxus/releases) e trascina MACxus in Applicazioni.
+2. La beta **non è firmata**: la prima volta tasto destro su MACxus → **Apri**, oppure `xattr -dr com.apple.quarantine /Applications/MACxus.app`.
+3. **Settings → Xodus backend → Compila il backend** (Rust lo compila in locale, qualche minuto).
+4. **Settings → Nexus runtime**: installa il runtime. MACxus sceglie la versione per cui sono state compilate le sue DLL patchate.
+5. **Settings → Motore Wine → Installa motore Highball** (consigliato per giochi D3D12 / Unreal); altrimenti si usa CrossOver.
+6. Accedi, installa un gioco, premi **Play**. Se macOS chiede l'accesso al Portachiavi, scegli **Consenti sempre**.
+
+Per segnalare un bug attiva **Settings → Game logging** e allega `~/Library/Application Support/MACxus/logs/<id>-latest.log` (rileggilo prima).
+
+### Controller
+
+- **DualSense / DualShock**: apri le impostazioni del gioco e attiva **DualSense compatibility mode**. Il pad viene presentato come controller Xbox (XInput); in questa modalità non ci sono vibrazione avanzata e trigger adattivi.
+- I giochi che leggono l'input tramite **GameInput** (per esempio Halo: Campaign Evolved) per ora non vedono nessun controller: GameInput in Wine è ancora uno stub.
+
+### Cosa cambia rispetto a Xodus Nexus
+
+Tutto ciò che è specifico per macOS è descritto in [docs/DISCOVERIES.md](docs/DISCOVERIES.md): overlay di avvio su RAM disk al posto di `WINE_DLL_FILE_MAP`, bridge loopback verso il servizio account, supporto al motore Highball, la correzione del last-error `%gs:0x68`, le DLL runtime patchate incluse nell'app (`assets/mac-runtime-dlls`, patch in `assets/runtime-patches`), la gestione del DualSense e i profili per gioco.
+
+---
+
+## Credits / Ringraziamenti
+
+See / Vedi [docs/DISCOVERIES.md](docs/DISCOVERIES.md#credits--ringraziamenti) and / e [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md). The original Xodus Nexus README / Il README originale di Xodus Nexus: [docs/README-xodus-nexus.md](docs/README-xodus-nexus.md).
+
+MIT License — © Xodus Nexus contributors and MACxus contributors. The bundled Wine DLLs are LGPL-2.1-or-later (see [assets/mac-runtime-dlls/README.md](assets/mac-runtime-dlls/README.md)).

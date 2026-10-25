@@ -1,0 +1,46 @@
+name: Problem on macOS / Problema su macOS
+description: A game or the launcher does not work as expected on macOS. / Un gioco o il launcher non funziona come previsto.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please search existing issues first. Never attach account tokens, Keychain contents or game files.
+        Cerca prima tra le issue esistenti. Non allegare mai token dell'account, contenuti del Portachiavi o file dei giochi.
+  - type: input
+    id: game
+    attributes:
+      label: Game (and Store ID if known) / Gioco (e Store ID se noto)
+      placeholder: Deep Rock Galactic (9NHFVWX1V7QJ)
+  - type: dropdown
+    id: engine
+    attributes:
+      label: Wine engine / Motore Wine
+      options: [Highball, CrossOver, Not sure / Non so]
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: Mac model, chip and macOS version / Modello Mac, chip e versione macOS
+      placeholder: MacBook Pro M1 Max, macOS 26.1
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: MACxus and CrossOver versions / Versioni di MACxus e CrossOver
+      placeholder: MACxus 0.3.11-mac.1, CrossOver 26.3
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens / Cosa succede
+      description: Steps, what you expected, what you saw. / Passi, cosa ti aspettavi, cosa vedi.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Launch log / Log di avvio
+      description: ~/Library/Application Support/MACxus/logs/<id>-latest.log (enable Verbose logs in Settings). Review it before posting. / Attiva i log dettagliati in Impostazioni e rileggilo prima di pubblicarlo.
+      render: text
