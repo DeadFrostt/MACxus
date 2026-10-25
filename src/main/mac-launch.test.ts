@@ -13,7 +13,7 @@ describe('runtimeDllDirectory', () => {
 
 describe('serviceSocketPathFits', () => {
   it('accepts the default macOS user-data socket path', () => {
-    expect(serviceSocketPathFits('/Users/maurizio/Library/Application Support/MACxus/service-sessions/game-abc123/xodus.sock')).toBe(true);
+    expect(serviceSocketPathFits('/Users/player/Library/Application Support/MACxus/service-sessions/game-abc123/xodus.sock')).toBe(true);
   });
 
   it('rejects a path longer than the macOS sun_path limit', () => {
