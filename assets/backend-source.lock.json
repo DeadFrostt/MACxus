@@ -50,6 +50,6 @@
     { "file": "xodus-bundle-membership.patch", "sha256": "a5eacc683d006b40247fbf124a62078080685b814cb09a33756083ab99adb72d" },
     { "file": "xodus-licensing-jwe.patch", "sha256": "6f0087e657f225e9a770405fbb34c2317f840615742c89b62f241f1b65c590ca" },
     { "file": "xodus-hosted-signin.patch", "sha256": "f52b16944ca7dfc837337e0257be380467f01872706252d7c2e981db0c57a8bc" },
-    { "file": "xodus-macos-launch.patch", "sha256": "03d108035767c4598ac3cd526c8ff561ab49bfd581f4102fb395bd1906ba03e2" }
+    { "file": "xodus-macos-launch.patch", "sha256": "09e4e53d90ded4bc06745d30b960a4bd2f17750b98282521b3a4a13b5b8bd613" }
   ]
 }
