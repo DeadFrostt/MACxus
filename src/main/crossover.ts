@@ -1,6 +1,7 @@
 import { constants, promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { run, type RunResult } from './process.js';
 import type { ProtonRunner } from './proton.js';
 
@@ -83,19 +84,36 @@ export interface RuntimeDllSource {
   dir: string;
   /** `<dataRoot>/runtime-overrides`: a DLL found here replaces the runtime's copy. */
   overrideDir?: string;
+  /** MACxus' patched DLLs shipped in the app (assets/mac-runtime-dlls); used after overrideDir. */
+  bundledDir?: string;
+}
+
+const BUNDLED_RUNTIME_DLLS = fileURLToPath(new URL('../../assets/mac-runtime-dlls', import.meta.url));
+
+/**
+ * The bundled DLLs are full builds of one Nexus runtime release plus the macOS
+ * patches (assets/runtime-patches); they apply only to that release, whose name
+ * manifest.json records. <release>/files/lib/wine/x86_64-windows is runtimeDllDir.
+ */
+export async function bundledRuntimeDllDirectory(runtimeDllDir: string, bundledDir = BUNDLED_RUNTIME_DLLS): Promise<string | undefined> {
+  try {
+    const manifest = JSON.parse(await fs.readFile(path.join(bundledDir, 'manifest.json'), 'utf8')) as { runtime?: unknown };
+    return manifest.runtime === path.basename(path.resolve(runtimeDllDir, '..', '..', '..', '..')) ? bundledDir : undefined;
+  } catch { return undefined; }
 }
 
 export function runtimeOverrideDirectory(dataRoot: string): string {
   return path.join(dataRoot, 'runtime-overrides');
 }
 
-async function readRuntimeDll(source: RuntimeDllSource, name: string): Promise<{ bytes: Buffer; overridden: boolean }> {
-  if (source.overrideDir) {
-    try { return { bytes: await fs.readFile(path.join(source.overrideDir, name)), overridden: true }; } catch (error) {
+async function readRuntimeDll(source: RuntimeDllSource, name: string): Promise<{ bytes: Buffer; origin: 'override' | 'bundled' | 'runtime' }> {
+  for (const [dir, origin] of [[source.overrideDir, 'override'], [source.bundledDir, 'bundled']] as const) {
+    if (!dir) continue;
+    try { return { bytes: await fs.readFile(path.join(dir, name)), origin }; } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
   }
-  return { bytes: await fs.readFile(path.join(source.dir, name)), overridden: false };
+  return { bytes: await fs.readFile(path.join(source.dir, name)), origin: 'runtime' };
 }
 
 /** Copies the runtime DLLs into the prefix's system32 as native DLLs; returns the names that changed. */
@@ -105,9 +123,11 @@ export async function installRuntimeDlls(prefix: string, runtimeDlls: string | R
   await fs.mkdir(system32, { recursive: true });
   const changed: string[] = [];
   const overridden: string[] = [];
+  const bundled: string[] = [];
   for (const name of MAC_RUNTIME_DLLS) {
     const dll = await readRuntimeDll(source, name);
-    if (dll.overridden) overridden.push(name);
+    if (dll.origin === 'override') overridden.push(name);
+    if (dll.origin === 'bundled') bundled.push(name);
     const stripped = stripBuiltinMarker(dll.bytes);
     const target = path.join(system32, name);
     let current: Buffer | undefined;
@@ -121,6 +141,7 @@ export async function installRuntimeDlls(prefix: string, runtimeDlls: string | R
     changed.push(name);
   }
   if (overridden.length) log(`DLL del runtime sostituite da ${source.overrideDir}: ${overridden.join(', ')}.`);
+  if (bundled.length) log(`DLL patchate di MACxus: ${bundled.join(', ')}.`);
   return changed;
 }
 

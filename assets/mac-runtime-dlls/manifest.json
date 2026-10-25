@@ -1,0 +1,10 @@
+{
+  "runtime": "xodus-nexus-runtime-11.0-20261022-gf4adc821",
+  "sha256": {
+    "gamingtcui.dll": "918cb47fb1efab7d2fbc6d6fe67bcae25033b12433cedc129d07632f0d129167",
+    "twinapi.appcore.dll": "c6e7a618f9a98fb8d110c810712a5fd2412a9813cd0591b4c320e35e0dc06026",
+    "windows.web.dll": "7be54bf8e319c0100d689caeb84354e6b5b0453df33d20c4988c4888839cd580",
+    "winhttp.dll": "e1aec3bc2bf9d6f0718c1ea3ebd76c1b80d441da7e275fed7575ece35115068f",
+    "xgameruntime.dll": "f46bc9eb5f51e2f3d1d4c89eaf2b96be3695ee7339930cd552740a1063d88c0f"
+  }
+}

@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, writeFile, rm, chmod } from 'node:fs/promises
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { MAC_RUNTIME_DLLS, crossOverWrapperScript, findCrossOver, installRuntimeDlls, prepareCrossOverRunner, runtimeOverrideDirectory, stripBuiltinMarker, type CrossOverInstall } from './crossover.js';
+import { MAC_RUNTIME_DLLS, bundledRuntimeDllDirectory, crossOverWrapperScript, findCrossOver, installRuntimeDlls, prepareCrossOverRunner, runtimeOverrideDirectory, stripBuiltinMarker, type CrossOverInstall } from './crossover.js';
 
 const temporary: string[] = [];
 async function tmp(): Promise<string> {
@@ -199,5 +199,50 @@ describe('installRuntimeDlls overrides', () => {
     expect((await readFile(path.join(bottles, 'xbox/drive_c/windows/system32/xgameruntime.dll'))).subarray(128).toString()).toBe('patched');
     expect((await readFile(log, 'utf8')).split('\n').filter((line) => line.includes('reg add'))).toHaveLength(MAC_RUNTIME_DLLS.length);
     expect(logs.join('\n')).toContain('xgameruntime.dll');
+  });
+});
+
+describe('bundled MACxus runtime DLLs', () => {
+  const RUNTIME = 'xodus-nexus-runtime-11.0-20261022-gf4adc821';
+  async function setup(release = RUNTIME) {
+    const base = await tmp();
+    const runtime = path.join(base, 'releases', release, 'files', 'lib', 'wine', 'x86_64-windows');
+    const bundled = path.join(base, 'bundled');
+    const overrides = runtimeOverrideDirectory(base);
+    const prefix = path.join(base, 'prefix');
+    await mkdir(runtime, { recursive: true });
+    await mkdir(bundled);
+    for (const name of MAC_RUNTIME_DLLS) await writeFile(path.join(runtime, name), dll(true));
+    await writeFile(path.join(bundled, 'manifest.json'), JSON.stringify({ runtime: RUNTIME }));
+    await writeFile(path.join(bundled, 'xgameruntime.dll'), Buffer.concat([dll(true), Buffer.from('bundled')]));
+    return { base, runtime, bundled, overrides, prefix };
+  }
+  const system32 = (prefix: string, name: string) => path.join(prefix, 'drive_c/windows/system32', name);
+
+  it('uses the bundled DLLs only for the runtime release they were built against', async () => {
+    const { runtime, bundled } = await setup();
+    expect(await bundledRuntimeDllDirectory(runtime, bundled)).toBe(bundled);
+    const other = await setup('xodus-nexus-runtime-11.0-20261101-gdeadbee');
+    expect(await bundledRuntimeDllDirectory(other.runtime, other.bundled)).toBeUndefined();
+  });
+
+  it('treats a missing or broken manifest as no bundled DLLs', async () => {
+    const { runtime, bundled } = await setup();
+    await writeFile(path.join(bundled, 'manifest.json'), '{');
+    expect(await bundledRuntimeDllDirectory(runtime, bundled)).toBeUndefined();
+    expect(await bundledRuntimeDllDirectory(runtime, path.join(bundled, 'missing'))).toBeUndefined();
+  });
+
+  it('prefers the user override, then the bundled copy, then the runtime', async () => {
+    const { runtime, bundled, overrides, prefix } = await setup();
+    await writeFile(path.join(bundled, 'winhttp.dll'), Buffer.concat([dll(true), Buffer.from('bundled')]));
+    await mkdir(overrides);
+    await writeFile(path.join(overrides, 'winhttp.dll'), Buffer.concat([dll(true), Buffer.from('user')]));
+    const logs: string[] = [];
+    await installRuntimeDlls(prefix, { dir: runtime, overrideDir: overrides, bundledDir: bundled }, (line) => logs.push(line));
+    expect((await readFile(system32(prefix, 'winhttp.dll'))).subarray(128).toString()).toBe('user');
+    expect((await readFile(system32(prefix, 'xgameruntime.dll'))).subarray(128).toString()).toBe('bundled');
+    expect((await readFile(system32(prefix, 'windows.web.dll'))).length).toBe(128);
+    expect(logs).toEqual([`DLL del runtime sostituite da ${overrides}: winhttp.dll.`, 'DLL patchate di MACxus: xgameruntime.dll.']);
   });
 });

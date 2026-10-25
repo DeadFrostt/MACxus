@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import type { MacEngine } from '../shared/types.js';
-import { findCrossOver, prepareCrossOverRunner, runtimeOverrideDirectory, type CrossOverInstall, type RuntimeDllSource } from './crossover.js';
+import { bundledRuntimeDllDirectory, findCrossOver, prepareCrossOverRunner, runtimeOverrideDirectory, type CrossOverInstall, type RuntimeDllSource } from './crossover.js';
 import { highballEngineInstalled, highballOverrideDirectory, prepareHighballRunner } from './highball-engine.js';
 import { CROSSOVER_MISSING } from './mac-launch.js';
 import { effectiveMacEngine, loadMacProfiles, macProfileFor, type MacProfiles } from './mac-profiles.js';
@@ -61,7 +61,8 @@ export async function prepareMacRunner(request: MacRunnerRequest, deps: MacRunne
   const engine = effectiveMacEngine(request.setting, profile, { crossover: Boolean(crossOver), highball: Boolean(highball) });
   const profileEnv = { ...(profile?.env ?? {}) };
   const bottlesRoot = path.join(request.dataRoot, 'bottles');
-  const runtimeDlls: RuntimeDllSource = { dir: request.runtimeDllDir, overrideDir: runtimeOverrideDirectory(request.dataRoot) };
+  const runtimeDlls: RuntimeDllSource = { dir: request.runtimeDllDir, overrideDir: runtimeOverrideDirectory(request.dataRoot), bundledDir: await bundledRuntimeDllDirectory(request.runtimeDllDir) };
+  if (!runtimeDlls.bundledDir) request.log('Le DLL patchate di MACxus non corrispondono a questo runtime: uso quelle del runtime (alcuni giochi potrebbero non funzionare).');
   const profileText = profile
     ? `profilo ${request.storeId?.toUpperCase()}${profile.note ? ` (${profile.note})` : ''}${Object.keys(profileEnv).length ? `, variabili: ${Object.keys(profileEnv).join(', ')}` : ''}`
     : 'nessun profilo';

@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { MAC_RUNTIME_DLLS } from './crossover.js';
-import { canonicalSnapshotName, nexusReleaseName, previewBaseRelease, RuntimeManager } from './runtime.js';
+import { canonicalSnapshotName, MAC_NEXUS_RUNTIME, nexusReleaseName, previewBaseRelease, RuntimeManager } from './runtime.js';
 import { run } from './process.js';
 
 describe('previewBaseRelease', () => {
@@ -61,6 +61,23 @@ describe('previewBaseRelease', () => {
     const status = await manager.checkNexus();
     expect(status.nexusVersion).toBe(newer.tag_name);
     expect(status.nexusName).toBe(newer.assets[0].name);
+  });
+
+  it.each([['darwin', 'pinned'], ['linux', 'newer']] as const)('on %s picks the %s runtime when the macOS-pinned release is published', async (platform, expected) => {
+    const runtime = (tag: string, published_at: string) => {
+      const name = `xodus-nexus-${tag}-x86_64.tar.xz`;
+      return { tag_name: tag, published_at, assets: [name, name.replace('.tar.xz', '.sha512sum')].map(name => ({ name, browser_download_url: `https://example.com/${name}` })) };
+    };
+    const pinned = runtime(MAC_NEXUS_RUNTIME, '2026-10-22T20:00:27Z');
+    const newer = runtime('runtime-11.0-20261101-gdeadbee0', '2026-11-01T20:00:00Z');
+    const fetcher = (async () => new Response(JSON.stringify([newer, pinned]))) as typeof fetch;
+    const status = await new RuntimeManager('/tmp/unused', () => undefined, () => false, fetcher, platform).checkNexus();
+    expect(status.nexusVersion).toBe((expected === 'pinned' ? pinned : newer).tag_name);
+  });
+
+  it('pins the macOS runtime to the release the bundled MACxus DLLs were built against', async () => {
+    const manifest = JSON.parse(await fs.readFile(new URL('../../assets/mac-runtime-dlls/manifest.json', import.meta.url), 'utf8'));
+    expect(manifest.runtime).toBe(`xodus-nexus-${MAC_NEXUS_RUNTIME}`);
   });
 
   it('reports no Nexus runtime when no release carries one', async () => {

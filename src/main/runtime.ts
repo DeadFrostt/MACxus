@@ -11,6 +11,8 @@ const REPOSITORY = 'xodus-gaming/Proton';
 const BRANCH = 'xodus/bleeding-edge';
 const REPOSITORY_URL = 'https://github.com/xodus-gaming/Proton.git';
 const NEXUS_REPOSITORY = 'domsvoboda/xodus-nexus';
+/** macOS runtime release: assets/mac-runtime-dlls holds patched builds of exactly this release. */
+export const MAC_NEXUS_RUNTIME = 'runtime-11.0-20261022-gf4adc821';
 
 interface RuntimePointer {
   name: string;
@@ -306,6 +308,10 @@ export class RuntimeManager {
         const archive = assets.find((asset) => /^xodus-nexus-runtime-[A-Za-z0-9._-]+-x86_64\.tar\.xz$/.test(asset.name) &&
           /^https:\/\//.test(asset.url) && assets.some((sum) => sum.name === asset.name.replace(/\.tar\.xz$/, '.sha512sum') && /^https:\/\//.test(sum.url)));
         const checksum = archive && assets.find((asset) => asset.name === archive.name.replace(/\.tar\.xz$/, '.sha512sum'));
+        if (archive && checksum && this.platform === 'darwin' && version === MAC_NEXUS_RUNTIME) {
+          found = { version, archive, checksum };
+          break;
+        }
         if (archive && checksum) {
           // GitHub's list order is not necessarily publication order, and the
           // commit suffix in runtime tags is not a sortable version number.
