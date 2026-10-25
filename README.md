@@ -54,19 +54,19 @@ Tested on one machine only (MacBook Pro M1 Max, macOS 27.2, CrossOver 26.3). Exp
 
 1. Download `MACxus-…-arm64.dmg` from [Releases](https://github.com/fladnaG86/MACxus/releases) and drag MACxus to Applications.
 2. The beta is **not signed**: the first time, right-click MACxus → **Open**, or run `xattr -dr com.apple.quarantine /Applications/MACxus.app`.
-3. **Settings → Xodus backend → Compila il backend** (Rust builds it locally, a few minutes).
+3. **Settings → Xodus backend → Build backend** (Rust builds it locally, a few minutes).
 4. **Settings → Nexus runtime**: install the runtime. MACxus picks the release its patched DLLs were built for.
-5. **Settings → Motore Wine → Installa motore Highball** (recommended for D3D12 / Unreal games); otherwise CrossOver is used.
+5. **Settings → Wine engine → Install Highball engine** (recommended for D3D12 / Unreal games); otherwise CrossOver is used.
 6. Sign in, install a game, press **Play**. If macOS asks for Keychain access, choose **Always Allow**.
 
 ### Games on an external SSD
 
-Short on internal disk space? Games can live on an external drive. In **Settings → Dove salvare i giochi** (also offered when you install a game) MACxus lists your disks with their free space:
+Short on internal disk space? Games can live on an external drive. In **Settings → Game storage** (also offered when you install a game) MACxus lists your disks with their free space:
 
-- **APFS or Mac OS Extended (HFS+) drive**: press **Scegli cartella** and pick a folder.
-- **exFAT / FAT / NTFS drive** (most SSDs come formatted this way): these cannot hold the symbolic links games need, so press **Crea immagine APFS**, choose a size in GB, and MACxus creates `MACxus.sparsebundle` on that drive. The image only takes the space actually used (up to the size you chose) and the drive keeps working with Windows/other devices.
+- **APFS or Mac OS Extended (HFS+) drive**: press **Choose folder** and pick a folder.
+- **exFAT / FAT / NTFS drive** (most SSDs come formatted this way): these cannot hold the symbolic links games need, so press **Create APFS image**, choose a size in GB, and MACxus creates `MACxus.sparsebundle` on that drive. The image only takes the space actually used (up to the size you chose) and the drive keeps working with Windows/other devices.
 
-MACxus re-mounts the image every time it starts and checks the free space before each download. If the drive is unplugged, its games show **Disco non collegato** until you reconnect it. The Wine bottles and the launcher data stay on the internal disk (a few GB).
+MACxus re-mounts the image every time it starts and checks the free space before each download. If the drive is unplugged, its games show **Drive disconnected** until you reconnect it. The Wine bottles and the launcher data stay on the internal disk (a few GB).
 
 For bug reports enable **Settings → Game logging** and attach `~/Library/Application Support/MACxus/logs/<id>-latest.log` (review it first).
 
@@ -111,21 +111,21 @@ Provato su una sola macchina (MacBook Pro M1 Max, macOS 27.2, CrossOver 26.3). A
 
 1. Scarica `MACxus-…-arm64.dmg` da [Releases](https://github.com/fladnaG86/MACxus/releases) e trascina MACxus in Applicazioni.
 2. La beta **non è firmata**: la prima volta tasto destro su MACxus → **Apri**, oppure `xattr -dr com.apple.quarantine /Applications/MACxus.app`.
-3. **Settings → Xodus backend → Compila il backend** (Rust lo compila in locale, qualche minuto).
-4. **Settings → Nexus runtime**: installa il runtime. MACxus sceglie la versione per cui sono state compilate le sue DLL patchate.
-5. **Settings → Motore Wine → Installa motore Highball** (consigliato per giochi D3D12 / Unreal); altrimenti si usa CrossOver.
+3. **Impostazioni → Backend Xodus → Compila il backend** (Rust lo compila in locale, qualche minuto).
+4. **Impostazioni → Runtime Nexus**: installa il runtime. MACxus sceglie la versione per cui sono state compilate le sue DLL patchate.
+5. **Impostazioni → Motore Wine → Installa motore Highball** (consigliato per giochi D3D12 / Unreal); altrimenti si usa CrossOver.
 6. Accedi, installa un gioco, premi **Play**. Se macOS chiede l'accesso al Portachiavi, scegli **Consenti sempre**.
 
 ### Giochi su SSD esterno
 
-Poco spazio sul disco interno? I giochi possono stare su un disco esterno. In **Settings → Dove salvare i giochi** (proposto anche quando installi un gioco) MACxus elenca i tuoi dischi con lo spazio libero:
+Poco spazio sul disco interno? I giochi possono stare su un disco esterno. In **Impostazioni → Dove salvare i giochi** (proposto anche quando installi un gioco) MACxus elenca i tuoi dischi con lo spazio libero:
 
 - **Disco APFS o Mac OS esteso (HFS+)**: premi **Scegli cartella** e scegli una cartella.
 - **Disco exFAT / FAT / NTFS** (la maggior parte degli SSD arriva formattata così): non supporta i link simbolici che servono ai giochi, quindi premi **Crea immagine APFS**, scegli una dimensione in GB e MACxus crea `MACxus.sparsebundle` su quel disco. L'immagine occupa solo lo spazio usato davvero (fino alla dimensione scelta) e il disco continua a funzionare con Windows e altri dispositivi.
 
 MACxus rimonta l'immagine a ogni avvio e controlla lo spazio libero prima di ogni download. Se il disco è scollegato, i suoi giochi mostrano **Disco non collegato** finché non lo ricolleghi. Le bottle Wine e i dati del launcher restano sul disco interno (qualche GB).
 
-Per segnalare un bug attiva **Settings → Game logging** e allega `~/Library/Application Support/MACxus/logs/<id>-latest.log` (rileggilo prima).
+Per segnalare un bug attiva **Impostazioni → Registrazione dei giochi** e allega `~/Library/Application Support/MACxus/logs/<id>-latest.log` (rileggilo prima).
 
 ### Controller
 

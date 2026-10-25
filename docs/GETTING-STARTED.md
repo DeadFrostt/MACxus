@@ -72,20 +72,20 @@ xattr -dr com.apple.quarantine /Applications/MACxus.app
 Now open MACxus from Applications. (Alternative without Terminal: try to open it once, then go to **System Settings → Privacy & Security**, scroll down, and click **Open Anyway**.)
 
 ### Step 8: First-time setup inside MACxus
-Open **Settings** in MACxus. Some buttons are in Italian; look for these labels:
-1. **Xodus backend → "Compila il backend"** ("Build the backend"). Takes a few minutes; you'll see text scrolling. Wait until it says it's done.
+Open **Settings** in MACxus. (Prefer Italian? **Settings → Language → Interface language**.) Then:
+1. **Xodus backend → "Build backend"**. Takes a few minutes; you'll see text scrolling. Wait until it says it's done.
 2. **Nexus runtime → "Install Nexus runtime"**.
-3. **Motore Wine → "Installa motore Highball"** ("Install Highball engine"). Recommended for newer games (Unreal Engine, DirectX 12).
+3. **Wine engine → "Install Highball engine"**. Recommended for newer games (Unreal Engine, DirectX 12).
 4. **Sign in with Xodus**: log in with your Microsoft account (the one that owns the game or has PC Game Pass).
 5. If macOS asks to access the **Keychain** (where passwords are stored), type your Mac password and click **Always Allow**. You may see this a few times.
 
 ### Step 9: Play
-Go to the **Store** or **Library**, install a game, and press **Play**.
+Go to the **Store** or **My Library**, install a game, and press **Play**.
 
-**Low on disk space?** Settings → **"Dove salvare i giochi"** ("Where to save games") lets you install games on an external SSD. See [Games on an external SSD](../README.md#games-on-an-external-ssd).
+**Low on disk space?** Settings → **"Game storage"** lets you install games on an external SSD. See [Games on an external SSD](../README.md#games-on-an-external-ssd).
 
 ### Updating MACxus later
-Download the new `.dmg`, drag MACxus into Applications again (choose **Replace**), and run the `xattr` command from step 7 again. If the release notes say so, press **"Compila il backend"** again.
+Download the new `.dmg`, drag MACxus into Applications again (choose **Replace**), and run the `xattr` command from step 7 again. If the release notes say so, press **"Build backend"** again.
 
 ### Good to know
 - Results depend on the game and on your chip. Games that **require ray tracing** need an **M3 or newer**. Games with **kernel anti-cheat** (for example Call of Duty) don't work.
@@ -162,22 +162,22 @@ xattr -dr com.apple.quarantine /Applications/MACxus.app
 Ora apri MACxus da Applicazioni. (In alternativa, senza Terminale: prova ad aprirla una volta, poi vai in **Impostazioni di Sistema → Privacy e sicurezza**, scorri in basso e clicca **Apri comunque**.)
 
 ### Passo 8: prima configurazione dentro MACxus
-Apri **Settings** in MACxus e cerca queste voci:
-1. **Xodus backend → "Compila il backend"**. Ci vogliono alcuni minuti e vedrai scorrere del testo. Aspetta che dica che ha finito.
-2. **Nexus runtime → "Install Nexus runtime"**.
+Apri **Settings** in MACxus e, per avere l'interfaccia in italiano, scegli **Language → Interface language → Italiano**. Poi cerca queste voci in **Impostazioni**:
+1. **Backend Xodus → "Compila il backend"**. Ci vogliono alcuni minuti e vedrai scorrere del testo. Aspetta che dica che ha finito.
+2. **Runtime Nexus → "Installa runtime Nexus"**.
 3. **Motore Wine → "Installa motore Highball"**. Consigliato per i giochi recenti (Unreal Engine, DirectX 12).
-4. **Sign in with Xodus**: accedi con il tuo account Microsoft (quello che possiede il gioco o ha PC Game Pass).
+4. **Accedi con Xodus**: accedi con il tuo account Microsoft (quello che possiede il gioco o ha PC Game Pass).
 5. Se macOS chiede l'accesso al **Portachiavi** (dove sono salvate le password), scrivi la password del Mac e clicca **Consenti sempre**. Può succedere più volte.
 
 ### Passo 9: gioca
-Vai nello **Store** o nella **Library**, installa un gioco e premi **Play**.
+Vai nel **Negozio** o in **La mia libreria**, installa un gioco e premi **Gioca**.
 
-**Poco spazio sul disco?** Settings → **"Dove salvare i giochi"** permette di installare i giochi su un SSD esterno. Vedi [Giochi su SSD esterno](../README.md#giochi-su-ssd-esterno).
+**Poco spazio sul disco?** Impostazioni → **"Dove salvare i giochi"** permette di installare i giochi su un SSD esterno. Vedi [Giochi su SSD esterno](../README.md#giochi-su-ssd-esterno).
 
 ### Aggiornare MACxus in seguito
 Scarica il nuovo `.dmg`, trascina di nuovo MACxus in Applicazioni (scegli **Sostituisci**) e ripeti il comando `xattr` del passo 7. Se le note della release lo indicano, premi di nuovo **"Compila il backend"**.
 
 ### Da sapere
 - I risultati dipendono dal gioco e dal chip. I giochi che **richiedono il ray tracing** hanno bisogno di un **M3 o successivo**. I giochi con **anti-cheat a livello kernel** (per esempio Call of Duty) non funzionano.
-- Per i giochi con **Easy Anti-Cheat**, nelle impostazioni del gioco c'è **"Play offline without anti-cheat"**, solo per la campagna o il gioco offline. **Non giocare online in questa modalità.**
-- Qualcosa non va? Attiva **Settings → Game logging**, riprova e allega il file `~/Library/Application Support/MACxus/logs/<id>-latest.log` (controllalo prima) a una segnalazione: https://github.com/fladnaG86/MACxus/issues
+- Per i giochi con **Easy Anti-Cheat**, nelle impostazioni del gioco c'è **"Gioca offline senza anti-cheat"**, solo per la campagna o il gioco offline. **Non giocare online in questa modalità.**
+- Qualcosa non va? Attiva **Impostazioni → Registrazione dei giochi**, riprova e allega il file `~/Library/Application Support/MACxus/logs/<id>-latest.log` (controllalo prima) a una segnalazione: https://github.com/fladnaG86/MACxus/issues
