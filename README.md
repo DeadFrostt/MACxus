@@ -11,6 +11,10 @@ I tuoi giochi PC del Microsoft Store / PC Game Pass, sui Mac Apple Silicon.
 
 **[English](#english)** · **[Italiano](#italiano)** · [Discoveries / Scoperte](docs/DISCOVERIES.md)
 
+<img src="docs/screenshots/macxus-home.png" width="49%" alt="MACxus Home on macOS" /> <img src="docs/screenshots/macxus-library.png" width="49%" alt="MACxus My Library on macOS" />
+
+*MACxus running on a MacBook Pro M1 Max / MACxus su un MacBook Pro M1 Max.*
+
 </div>
 
 > [!CAUTION]
