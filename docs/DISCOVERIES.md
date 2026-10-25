@@ -51,6 +51,15 @@ Most external SSDs are exFAT, which has no symbolic links, and installed games n
 - Rosetta frames do not symbolize in macOS `sample`, so studying hangs needs Wine's own traces (`WINEDEBUG=+gdkc` for xgameruntime).
 - Halo (UE5) **does** read Engine.ini in `Saved/Config/WinGDK`, but the game overrides `r.ScreenPercentage`.
 
+### 14. AVX under Rosetta
+Rosetta 2 can run AVX/AVX2 code, but it only reports AVX in `CPUID` when `ROSETTA_ADVERTISE_AVX` is set. CrossOver's `wine` script sets it to 1 by default; the Highball wrapper did not, so a game with an AVX check (Gears of War: E-Day: "Your CPU must support AVX") started on CrossOver and refused to start on Highball. The Highball wrapper now defaults it to 1 as well. Rosetta treats **any** value as "on", so `ROSETTA_ADVERTISE_AVX=0` unsets the variable, as CrossOver does.
+
+### 15. Games that ship their own `xgameruntime.dll`
+Some packages (Gears of War: E-Day) include the Windows GDK runtime next to the executable. Wine loads DLLs from the executable's folder before `system32`, so the game used Microsoft's runtime instead of the Nexus one in the prefix. That runtime needs Windows Gaming Services, so `XGameRuntimeInitialize` failed. XCurl could not create its task queue and Unreal aborted with `Could not initialize libcurl (result=2)`. The `+gdkc` trace stayed empty, which is the giveaway that the Nexus runtime was never loaded. Fix in `assets/xodus-macos-launch.patch`: the RAM-disk launch view drops every `xgameruntime.dll`, so Wine falls back to the prefix copy. The installed package is untouched. The backend has to be rebuilt (Settings → Compila il backend).
+
+### 16. Games that require ray tracing
+Gears of War: E-Day requires a GPU with DirectX Raytracing and has no raster fallback. On M1 the game stops with a "ray tracing required" message. As far as we know, D3DMetal exposes DXR only on Apple GPUs with hardware ray tracing (M3 and newer); this was not measured with a probe. Faking the capability would only move the crash into the DXR calls. These games need M3 or newer.
+
 ---
 
 ## Italiano
@@ -96,6 +105,15 @@ La maggior parte degli SSD esterni è in exFAT, che non ha link simbolici, e i g
 - Uno sparse bundle APFS poteva essere montato due volte: risolto controllando prima i montaggi esistenti.
 - I frame di Rosetta non vengono simbolizzati da `sample` di macOS, quindi per studiare i blocchi servono le trace di Wine (`WINEDEBUG=+gdkc` per xgameruntime).
 - Halo (UE5) **legge** Engine.ini in `Saved/Config/WinGDK`, ma il gioco sovrascrive `r.ScreenPercentage`.
+
+### 14. AVX sotto Rosetta
+Rosetta 2 sa eseguire codice AVX/AVX2, ma dichiara AVX nel `CPUID` solo se è impostata `ROSETTA_ADVERTISE_AVX`. Lo script `wine` di CrossOver la imposta a 1 di default; il wrapper Highball no. Per questo un gioco con controllo AVX (Gears of War: E-Day: "Your CPU must support AVX") partiva con CrossOver e si rifiutava di partire con Highball. Ora anche il wrapper Highball la imposta a 1 di default. Rosetta considera **qualsiasi** valore come "attivo", quindi `ROSETTA_ADVERTISE_AVX=0` toglie la variabile, come fa CrossOver.
+
+### 15. Giochi che includono il proprio `xgameruntime.dll`
+Alcuni pacchetti (Gears of War: E-Day) contengono il runtime GDK di Windows accanto all'eseguibile. Wine carica le DLL dalla cartella dell'eseguibile prima che da `system32`, quindi il gioco usava il runtime Microsoft invece di quello Nexus del prefix. Quel runtime richiede i Gaming Services di Windows, perciò `XGameRuntimeInitialize` falliva. XCurl non riusciva a creare la sua coda di task e Unreal si fermava con `Could not initialize libcurl (result=2)`. Indizio: la trace `+gdkc` restava vuota, cioè il runtime Nexus non veniva mai caricato. Correzione in `assets/xodus-macos-launch.patch`: la vista di avvio su RAM disk esclude ogni `xgameruntime.dll`, così Wine usa la copia del prefix. Il pacchetto installato non viene toccato. Il backend va ricompilato (Impostazioni → Compila il backend).
+
+### 16. Giochi che richiedono il ray tracing
+Gears of War: E-Day richiede una GPU con DirectX Raytracing e non ha un'alternativa raster. Su M1 il gioco si ferma con il messaggio "ray tracing richiesto". Per quanto ne sappiamo, D3DMetal espone DXR solo sulle GPU Apple con ray tracing hardware (M3 e successivi); non è stato misurato con un probe. Simulare il supporto sposterebbe solo il crash dentro le chiamate DXR. Per questi giochi serve un M3 o successivo.
 
 ---
 
