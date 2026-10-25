@@ -19,7 +19,7 @@ import { RuntimeManager } from './runtime.js';
 import { prepareProtonRunner, syncPrefixUserLocale, syncUnrealCultureGameIni, type ProtonRunner } from './proton.js';
 import { highballEngineInstalled, HIGHBALL_ENGINE_TAG, installHighballEngine } from './highball-engine.js';
 import { prepareMacRunner } from './mac-engine.js';
-import { macRuntimeAvailable, runtimeDllDirectory, serviceSocketPathFits } from './mac-launch.js';
+import { macRuntimeAvailable, runtimeDllDirectory, serviceSocketPathFits, syncMacDualSenseCompatibility } from './mac-launch.js';
 import { CatalogService } from './catalog.js';
 import { cloudSaveRuntime, selectedWinePath, startXodusService, storeContentRuntime, unbridgedCloudSaveRuntime, type XodusServiceSession } from './xodus-service.js';
 import { GameLogReducer, gameLoggingEnvironment, gameWindowEnvironment } from './game-log.js';
@@ -1035,6 +1035,7 @@ async function prepareGameLaunch(id: string): Promise<void> {
       : { ...process.env, WINEPREFIX: legacyPrefixRoot, WINEARCH: 'win64' }, verboseLogs)), locale));
     // Per-game macOS profile values (whitelisted) apply unless the user already set them.
     for (const [key, value] of Object.entries(macProfileEnv)) if (environment[key] === undefined) environment[key] = value;
+    if (isMac && protonRunner) await syncMacDualSenseCompatibility(wineCommand, gamePrefix, game.launchTools?.dualSenseCompatibility === true, environment, addGameLog);
     const contentRoots = await contentManager().roots(game).catch(error => {
       addGameLog(`Managed content discovery unavailable: ${(error as Error).message}`);
       return [] as string[];

@@ -1,6 +1,7 @@
 import { constants, promises as fs } from 'node:fs';
 import path from 'node:path';
 import { MAC_RUNTIME_DLLS } from './crossover.js';
+import { run, type RunOptions, type RunResult } from './process.js';
 
 export const CROSSOVER_MISSING = 'CrossOver non trovato. Installa CrossOver in Applicazioni e riprova.';
 
@@ -28,4 +29,39 @@ export async function macRuntimeAvailable(winePath: string): Promise<boolean> {
 /** macOS limits AF_UNIX paths to 104 bytes including the terminating NUL. */
 export function serviceSocketPathFits(socketPath: string): boolean {
   return Buffer.byteLength(socketPath) < 104;
+}
+
+const WINEBUS_KEY = 'HKLM\\System\\CurrentControlSet\\Services\\winebus';
+
+/** Whether a prefix's system.reg sets winebus DisableHidraw to a non-zero value. Wine stores
+ * CurrentControlSet, a registry link, under ControlSet001. */
+export function prefixHidrawDisabled(systemReg: string): boolean {
+  const section = systemReg.split(/\r?\n(?=\[)/).find(block => /^\[System\\\\(?:CurrentControlSet|ControlSet\d{3})\\\\Services\\\\winebus\]/i.test(block));
+  const value = section?.match(/^"DisableHidraw"=dword:([0-9a-f]{8})$/im)?.[1];
+  return value !== undefined && parseInt(value, 16) !== 0;
+}
+
+/**
+ * DualSense compatibility mode on macOS. Wine exposes a DualSense as a raw HID
+ * device by default, which XInput titles do not see; PROTON_DISABLE_HIDRAW
+ * exists only in Proton, so the macOS engines need winebus DisableHidraw in
+ * the prefix registry. SDL then maps the controller as an XInput gamepad.
+ * The bottle is shared by all games, so the value follows the launched game.
+ */
+export async function syncMacDualSenseCompatibility(
+  wineCommand: string,
+  prefix: string,
+  enabled: boolean,
+  env: NodeJS.ProcessEnv,
+  onLine: (line: string) => void,
+  runCommand: (command: string, args: string[], options: RunOptions) => Promise<RunResult> = run,
+): Promise<void> {
+  let current = false;
+  try { current = prefixHidrawDisabled(await fs.readFile(path.join(prefix, 'system.reg'), 'latin1')); } catch { /* new prefix */ }
+  if (current === enabled) return;
+  onLine(enabled
+    ? 'DualSense compatibility mode: the controller is exposed to the game as an XInput gamepad.'
+    : 'DualSense compatibility mode off: the controller is exposed to the game as a native DualSense HID device.');
+  const result = await runCommand(wineCommand, ['reg', 'add', WINEBUS_KEY, '/v', 'DisableHidraw', '/t', 'REG_DWORD', '/d', enabled ? '1' : '0', '/f'], { env, maxOutput: 100_000 });
+  if (result.code !== 0) onLine(`The DualSense compatibility setting could not be applied (reg exited with code ${result.code}).`);
 }
