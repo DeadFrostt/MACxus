@@ -185,6 +185,8 @@ export const italianMessages = {
   "Play offline without anti-cheat": "Gioca offline senza anti-cheat",
   "Easy Anti-Cheat cannot run on macOS. Starts the game executable directly with the EOS Null Client: online multiplayer and other protected features will not work. Do not try to play online in this mode; your account is your responsibility.": "Easy Anti-Cheat non funziona su macOS. Avvia direttamente l’eseguibile del gioco con EOS Null Client: il multiplayer online e altre funzionalità protette non funzioneranno. Non tentare di giocare online in questa modalità; il tuo account è sotto la tua responsabilità.",
   "DualSense compatibility mode": "Modalità compatibilità DualSense",
+  "Show Metal performance HUD": "Mostra l’HUD prestazioni Metal",
+  "Apple's on-screen overlay with frame rate, frame time and GPU memory, for games rendered through D3DMetal.": "Il pannello Apple sullo schermo con frame al secondo, tempo per frame e memoria GPU, per i giochi resi tramite D3DMetal.",
   "Try this if a standard DualSense controller is not detected. Disables its native HIDRAW input for this game only. Advanced haptics and adaptive triggers may be unavailable. Does not change Xbox controller settings.": "Prova questa opzione se un controller DualSense standard non viene rilevato. Disabilita l’input HIDRAW nativo solo per questo gioco. Le funzioni aptiche avanzate e i grilletti adattivi potrebbero non essere disponibili. Non modifica le impostazioni dei controller Xbox.",
   "Enable MangoHud": "Abilita MangoHud",
   "Run in gamescope": "Esegui in gamescope",

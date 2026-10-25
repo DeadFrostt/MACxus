@@ -23,6 +23,9 @@ it('validates persisted launch tool settings at the IPC boundary', () => {
   expect(() => normalizeLaunchTools({ ...defaultLaunchTools, dualSenseCompatibility:'yes' })).toThrow();
   expect(normalizeLaunchTools({ mangoHud:false, gamescope:false, gamescopeArgs:'', launchOptions:'' }).dualSenseCompatibility).toBe(false);
   expect(normalizeLaunchTools({ ...defaultLaunchTools, dualSenseCompatibility:true }).dualSenseCompatibility).toBe(true);
+  expect(normalizeLaunchTools({ mangoHud:false, gamescope:false, gamescopeArgs:'', launchOptions:'' }).metalHud).toBe(false);
+  expect(normalizeLaunchTools({ ...defaultLaunchTools, metalHud:true }).metalHud).toBe(true);
+  expect(() => normalizeLaunchTools({ ...defaultLaunchTools, metalHud:1 })).toThrow();
   expect(() => normalizeLaunchTools({ ...defaultLaunchTools, gamescopeArgs:'-f --' })).toThrow();
   expect(normalizeLaunchTools({ ...defaultLaunchTools, launchOptions:' PROTON_ENABLE_WAYLAND=1 %command% ' }).launchOptions).toBe('PROTON_ENABLE_WAYLAND=1 %command%');
 });

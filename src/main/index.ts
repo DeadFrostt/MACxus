@@ -1049,6 +1049,10 @@ async function prepareGameLaunch(id: string): Promise<void> {
     if (game.launchTools?.offlineWithoutAntiCheat && offlineAntiCheatLaunch(args, environment, inspected.antiCheat?.executable)) {
       addGameLog(`Offline without anti-cheat: launching ${inspected.antiCheat?.executable} with the EOS Null Client. Online features are unavailable.`);
     }
+    if (isMac && game.launchTools?.metalHud) {
+      environment.MTL_HUD_ENABLED = '1';
+      addGameLog('Metal performance HUD enabled for this game.');
+    }
     // Per-game macOS profile values (whitelisted) apply unless the user already set them.
     for (const [key, value] of Object.entries(macProfileEnv)) if (environment[key] === undefined) environment[key] = value;
     if (isMac && protonRunner) await syncMacDualSenseCompatibility(wineCommand, gamePrefix, game.launchTools?.dualSenseCompatibility === true, environment, addGameLog);

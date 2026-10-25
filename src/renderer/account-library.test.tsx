@@ -132,6 +132,14 @@ it.each(['supported', 'unsupported'] as const)('opens the detail page from a %s 
   expect(html).toContain('tabindex="-1"'); expect(html).not.toContain('Action unavailable');
 });
 
+it('on macOS offers the Metal HUD instead of the Linux-only MangoHud and gamescope', () => {
+  const mac = renderToStaticMarkup(<GameLaunchToolFields value={{ ...defaultLaunchTools, metalHud: true }} change={() => {}} mac />);
+  expect(mac).toContain('Show Metal performance HUD'); expect(mac).toContain('checked');
+  for (const linuxOnly of ['MangoHud', 'gamescope', 'Tools must already be installed']) expect(mac).not.toContain(linuxOnly);
+  const linux = renderToStaticMarkup(<GameLaunchToolFields value={defaultLaunchTools} change={() => {}} />);
+  expect(linux).toContain('Enable MangoHud'); expect(linux).toContain('Run in gamescope'); expect(linux).not.toContain('Metal performance HUD');
+});
+
 it('offers offline play without anti-cheat only for EAC games, off by default', () => {
   const render = (antiCheat: boolean, enabled = false) => renderToStaticMarkup(<GameLaunchToolFields value={{ ...defaultLaunchTools, offlineWithoutAntiCheat: enabled }} change={() => {}} antiCheat={antiCheat} />);
   expect(render(false)).not.toContain('Play offline without anti-cheat');

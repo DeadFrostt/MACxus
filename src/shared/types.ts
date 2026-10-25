@@ -88,6 +88,8 @@ export interface RuntimeStatus {
 export interface GameLaunchTools {
   dualSenseCompatibility?: boolean;
   offlineWithoutAntiCheat?: boolean;
+  /** macOS: Apple's Metal performance HUD (MTL_HUD_ENABLED) over the game. */
+  metalHud?: boolean;
   mangoHud: boolean;
   gamescope: boolean;
   gamescopeArgs: string;

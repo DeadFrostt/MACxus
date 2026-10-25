@@ -631,7 +631,7 @@ function GameContentDialog({ game, data, close, toast }: { game: Game; data: App
   </section></div>;
 }
 
-export function GameLaunchToolFields({ value, change, antiCheat = false }: { value: GameLaunchTools; change: (value: GameLaunchTools) => void; antiCheat?: boolean }) {
+export function GameLaunchToolFields({ value, change, antiCheat = false, mac = false }: { value: GameLaunchTools; change: (value: GameLaunchTools) => void; antiCheat?: boolean; mac?: boolean }) {
   const { t } = useI18n();
   const update = (patch: Partial<GameLaunchTools>) => change({ ...value, ...patch });
   return <fieldset className="game-launch-tools"><legend>{t("Launch tools")}</legend>
@@ -639,11 +639,14 @@ export function GameLaunchToolFields({ value, change, antiCheat = false }: { val
     <small>{t("Easy Anti-Cheat cannot run on macOS. Starts the game executable directly with the EOS Null Client: online multiplayer and other protected features will not work. Do not try to play online in this mode; your account is your responsibility.")}</small></> : null}
     <label className="tool-checkbox"><input type="checkbox" checked={value.dualSenseCompatibility === true} onChange={event => update({ dualSenseCompatibility: event.target.checked })} /><span>{t("DualSense compatibility mode")}</span></label>
     <small>{t("Try this if a standard DualSense controller is not detected. Disables its native HIDRAW input for this game only. Advanced haptics and adaptive triggers may be unavailable. Does not change Xbox controller settings.")}</small>
+    {/* MangoHud and gamescope exist only on Linux; macOS offers Apple's Metal HUD instead. */}
+    {mac ? <><label className="tool-checkbox"><input type="checkbox" checked={value.metalHud === true} onChange={event => update({ metalHud: event.target.checked })} /><span>{t("Show Metal performance HUD")}</span></label>
+    <small>{t("Apple's on-screen overlay with frame rate, frame time and GPU memory, for games rendered through D3DMetal.")}</small></> : <>
     <label className="tool-checkbox"><input type="checkbox" checked={value.mangoHud} onChange={event => update({ mangoHud: event.target.checked })} /><span>{t("Enable MangoHud")}</span></label>
     <label className="tool-checkbox"><input type="checkbox" checked={value.gamescope} onChange={event => update({ gamescope: event.target.checked })} /><span>{t("Run in gamescope")}</span></label>
-    {value.gamescope ? <label>{t("Gamescope options")}<input value={value.gamescopeArgs} maxLength={2048} placeholder="-W 1920 -H 1080 -f" onChange={event => update({ gamescopeArgs: event.target.value })} /><small>{t("Only options. Nexus adds the game command. MangoHud with gamescope requires mangoapp.")}</small></label> : null}
+    {value.gamescope ? <label>{t("Gamescope options")}<input value={value.gamescopeArgs} maxLength={2048} placeholder="-W 1920 -H 1080 -f" onChange={event => update({ gamescopeArgs: event.target.value })} /><small>{t("Only options. Nexus adds the game command. MangoHud with gamescope requires mangoapp.")}</small></label> : null}</>}
     <label>{t("Launch options")}<textarea rows={3} value={value.launchOptions} maxLength={2048} placeholder="PROTON_ENABLE_WAYLAND=1 gamemoderun %command% --launcher-skip" onChange={event => update({ launchOptions: event.target.value })} /><small>{t("NAME=value and wrappers before %command%, game arguments after it. Quotes are supported, not shell expansion. Variables are passed to Wine; Proton-script-only options depend on runtime support.")}</small></label>
-    <small>{t("Tools must already be installed. Applies to this game and its shortcuts, not the launcher.")}</small>
+    {mac ? null : <small>{t("Tools must already be installed. Applies to this game and its shortcuts, not the launcher.")}</small>}
   </fieldset>;
 }
 
@@ -842,7 +845,7 @@ export function LibraryPage({ data, toast, filters, onFiltersChange, selection }
         <label>{t("Display name")}<input required value={editTitle} onChange={(event) => setEditTitle(event.target.value)} /></label>
         <label>{t("Game language")}<select value={editLocale} onChange={(event) => setEditLocale(event.target.value)}><option value="">{t("System default")}</option>{localeOptions.map((locale) => <option key={locale} value={locale}>{locale}</option>)}{editLocale && !localeOptions.some((locale) => locale.toLowerCase() === editLocale.toLowerCase()) ? <option value={editLocale}>{editLocale}</option> : null}</select></label>
         <p>{t("Available languages come from the game manifest. All games use the active Xodus Runtime.")}</p>
-        <GameLaunchToolFields value={editTools} change={setEditTools} antiCheat={Boolean(modalGame.antiCheat?.executable)} />
+        <GameLaunchToolFields value={editTools} change={setEditTools} antiCheat={Boolean(modalGame.antiCheat?.executable)} mac={data.platform === 'darwin'} />
         <div className="dialog-actions"><button type="button" className="secondary" disabled={dialogBusy} data-gamepad-cancel onClick={() => setDialogGame(undefined)}>{t("Cancel")}</button><button className="primary" disabled={dialogBusy || !editTitle.trim()}><Check />{t("Save")}</button></div>
       </form>}
     </section></div> : null}
