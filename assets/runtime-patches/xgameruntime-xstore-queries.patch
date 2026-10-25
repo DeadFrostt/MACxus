@@ -1,6 +1,6 @@
 --- a/dlls/xgameruntime/xstore.c
 +++ b/dlls/xgameruntime/xstore.c
-@@ -90,26 +90,100 @@
+@@ -90,26 +90,189 @@
  
  static HRESULT WINAPI x_store_XStoreQueryAssociatedProductsAsync( IXStoreImpl6 *iface, const XStoreContextHandle storeContextHandle, XStoreProductKind productKinds, UINT32 maxItemsToRetrievePerPage, XAsyncBlock *async )
  {
@@ -17,12 +17,88 @@
 -    FIXME( "iface %p, async %p, productQueryHandle %p stub!\n", iface, async, productQueryHandle );
 -    return E_NOTIMPL;
 +    return entitled_result(async, productQueryHandle, FALSE);
- }
- 
++}
++
 +static const char store_products_identity[] = "XStoreQueryProducts";
 +
-+/* There is no catalog lookup by store id: complete with an empty product page
-+ * that the shared entitled enumerate/has-more/close helpers accept. */
++/* Catalog metadata for products the game asks about by store id comes from
++ * C:\ProgramData\MACxus\store-catalog.txt (written by the launcher), one
++ * "storeId<TAB>kind<TAB>title" line each. Requested ids found there are
++ * returned as catalog entries that are NOT in the user's collection, like the
++ * Windows store does for unowned upsell offers; unknown ids are left out. */
++struct store_products_query
++{
++    XStoreProductKind kinds;
++    SIZE_T count;
++    char ids[64][13];
++};
++
++static BOOL store_catalog_lookup( const char *id, XStoreProductKind *kind, char *title, SIZE_T title_size )
++{
++    char line[512], *tab1, *tab2, *eol;
++    BOOL found = FALSE;
++    FILE *file;
++
++    if (!(file = fopen( "C:\\ProgramData\\MACxus\\store-catalog.txt", "r" ))) return FALSE;
++    while (!found && fgets( line, sizeof(line), file ))
++    {
++        if ((eol = strpbrk( line, "\r\n" ))) *eol = 0;
++        if (!(tab1 = strchr( line, '\t' )) || !(tab2 = strchr( tab1 + 1, '\t' ))) continue;
++        *tab1 = *tab2 = 0;
++        if (strcmp( line, id )) continue;
++        *kind = strtoul( tab1 + 1, NULL, 0 );
++        snprintf( title, title_size, "%s", tab2 + 1 );
++        found = TRUE;
++    }
++    fclose( file );
++    return found;
++}
++
++static struct entitled_snapshot *store_products_snapshot( const struct store_products_query *query )
++{
++    struct entitled_snapshot *snapshot;
++    XStoreProductKind kind;
++    char title[256];
++    SIZE_T i;
++
++    if (!(snapshot = calloc( 1, sizeof(*snapshot) ))) return NULL;
++    snapshot->refs = 1;
++    snapshot->valid_until = ~(UINT64)0;
++    if (query && query->count && !(snapshot->products = calloc( query->count, sizeof(*snapshot->products) )))
++    {
++        free( snapshot );
++        return NULL;
++    }
++    for (i = 0; query && i < query->count; i++)
++    {
++        XStoreProduct *product = &snapshot->products[snapshot->count];
++        if (!store_catalog_lookup( query->ids[i], &kind, title, sizeof(title) ) || !(kind & query->kinds))
++        {
++            TRACE( "  %s not in catalog, skipped.\n", debugstr_a( query->ids[i] ) );
++            continue;
++        }
++        product->storeId = strdup( query->ids[i] );
++        product->title = strdup( title );
++        product->description = strdup( "" );
++        product->language = strdup( "" );
++        product->inAppOfferToken = strdup( "" );
++        product->productKind = kind;
++        product->hasDigitalDownload = TRUE;
++        product->isInUserCollection = FALSE;
++        if ((product->skus = calloc( 1, sizeof(*product->skus) )))
++        {
++            product->skusCount = 1;
++            product->skus[0].skuId = strdup( "0010" );
++            product->skus[0].title = strdup( title );
++            product->skus[0].description = strdup( "" );
++            product->skus[0].language = strdup( "" );
++        }
++        TRACE( "  %s kind %#x %s, not owned.\n", debugstr_a( product->storeId ), kind, debugstr_a( title ) );
++        snapshot->count++;
++    }
++    return snapshot;
++}
++
 +static HRESULT WINAPI XStoreQueryProductsProvider( XAsyncOp op, const XAsyncProviderData *data )
 +{
 +    struct entitled_snapshot *snapshot;
@@ -47,13 +123,12 @@
 +
 +        case XAsyncOp_GetResult:
 +            if (!data->buffer || data->bufferSize < sizeof(void *)) { hr = E_INVALIDARG; break; }
-+            snapshot = calloc( 1, sizeof(*snapshot) );
++            snapshot = store_products_snapshot( data->context );
 +            page = calloc( 1, sizeof(*page) );
-+            if (!snapshot || !page) { free( snapshot ); free( page ); hr = E_OUTOFMEMORY; break; }
-+            snapshot->refs = 1;
-+            snapshot->valid_until = ~(UINT64)0;
++            if (!snapshot || !page) { if (snapshot) entitled_snapshot_release( snapshot ); free( page ); hr = E_OUTOFMEMORY; break; }
 +            page->refs = 1;
 +            page->snapshot = snapshot;
++            page->size = snapshot->count;
 +            AcquireSRWLockExclusive( &entitled_pages_lock );
 +            page->next = entitled_pages;
 +            entitled_pages = page;
@@ -63,6 +138,10 @@
 +            break;
 +
 +        case XAsyncOp_Cleanup:
++            free( data->context );
++            hr = S_OK;
++            break;
++
 +        case XAsyncOp_Cancel:
 +            hr = S_OK;
 +            break;
@@ -73,20 +152,30 @@
 +
 +    IXThreadingImpl_Release( xthreading );
 +    return hr;
-+}
-+
+ }
+ 
  static HRESULT WINAPI x_store_XStoreQueryProductsAsync( IXStoreImpl6 *iface, const XStoreContextHandle storeContextHandle, XStoreProductKind productKinds, const char **storeIds, SIZE_T storeIdsCount, const char **actionFilters, SIZE_T actionFiltersCount, XAsyncBlock *async )
  {
 -    FIXME( "iface %p, storeContextHandle %p, productKinds %#x, storeIds %p, storeIdsCount %Iu, actionFilters %p, actionFiltersCount %Iu, async %p stub!\n", iface, storeContextHandle, productKinds, storeIds, storeIdsCount, actionFilters, actionFiltersCount, async );
 -    return E_NOTIMPL;
++    struct store_products_query *query;
 +    IXThreadingImpl *xthreading;
 +    HRESULT hr;
++    SIZE_T i;
 +
-+    TRACE( "iface %p, storeContextHandle %p, productKinds %#x, storeIds %p, storeIdsCount %Iu, actionFilters %p, actionFiltersCount %Iu, async %p, returning no products.\n", iface, storeContextHandle, productKinds, storeIds, storeIdsCount, actionFilters, actionFiltersCount, async );
++    TRACE( "iface %p, storeContextHandle %p, productKinds %#x, storeIds %p, storeIdsCount %Iu, actionFilters %p, actionFiltersCount %Iu, async %p.\n", iface, storeContextHandle, productKinds, storeIds, storeIdsCount, actionFilters, actionFiltersCount, async );
 +
 +    if (!storeContextHandle || !async || (storeIdsCount && !storeIds)) return E_INVALIDARG;
-+    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) return hr;
-+    hr = IXThreadingImpl_XAsyncBegin( xthreading, async, NULL, store_products_identity, "XStoreQueryProductsAsync", XStoreQueryProductsProvider );
++    if (!(query = calloc( 1, sizeof(*query) ))) return E_OUTOFMEMORY;
++    query->kinds = productKinds;
++    for (i = 0; i < storeIdsCount && query->count < ARRAY_SIZE(query->ids); i++)
++    {
++        TRACE( "  storeIds[%Iu] %s\n", i, debugstr_a( storeIds[i] ) );
++        if (entitled_id( storeIds[i] )) memcpy( query->ids[query->count++], storeIds[i], 13 );
++    }
++    if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) { free( query ); return hr; }
++    hr = IXThreadingImpl_XAsyncBegin( xthreading, async, query, store_products_identity, "XStoreQueryProductsAsync", XStoreQueryProductsProvider );
++    if (FAILED(hr)) free( query );
 +    IXThreadingImpl_Release( xthreading );
 +    return hr;
  }
@@ -109,10 +198,14 @@
  }
  
  static HRESULT WINAPI x_store_XStoreQueryEntitledProductsAsync( IXStoreImpl6 *iface, const XStoreContextHandle storeContextHandle, XStoreProductKind productKinds, UINT32 maxItemsToRetrievePerPage, XAsyncBlock *async )
-@@ -280,22 +354,93 @@
-     return hr;
- }
- 
+@@ -276,26 +439,97 @@
+     if (!async || !license) return E_INVALIDARG;
+     if (FAILED(hr = QueryApiImpl( &CLSID_XThreadingImpl, &IID_IXThreadingImpl, (void **)&xthreading ))) return hr;
+     hr = IXThreadingImpl_XAsyncGetResult( xthreading, async, x_store_XStoreQueryGameLicenseAsync, sizeof(*license), license, NULL );
++    IXThreadingImpl_Release( xthreading );
++    return hr;
++}
++
 +static const char store_addon_licenses_identity[] = "XStoreQueryAddOnLicenses";
 +
 +/* No add-on licenses are known locally: complete successfully with an empty
@@ -147,10 +240,10 @@
 +            hr = E_NOTIMPL;
 +    }
 +
-+    IXThreadingImpl_Release( xthreading );
-+    return hr;
-+}
-+
+     IXThreadingImpl_Release( xthreading );
+     return hr;
+ }
+ 
  static HRESULT WINAPI x_store_XStoreQueryAddOnLicensesAsync( IXStoreImpl6 *iface, const XStoreContextHandle storeContextHandle, XAsyncBlock *async )
  {
 -    FIXME( "iface %p, storeContextHandle %p, async %p stub!\n", iface, storeContextHandle, async );
@@ -209,3 +302,27 @@
  }
  
  static HRESULT WINAPI x_store_XStoreQueryConsumableBalanceRemainingAsync( IXStoreImpl6 *iface, const XStoreContextHandle storeContextHandle, const char *storeProductId, XAsyncBlock *async )
+--- a/dlls/xgameruntime/xstore_entitled.h
++++ b/dlls/xgameruntime/xstore_entitled.h
+@@ -476,7 +476,12 @@
+     if (!callback || !(page = entitled_page_acquire(handle))) return E_INVALIDARG;
+     if (!entitled_page_valid(page)) { entitled_page_release(page); return E_ACCESSDENIED; }
+     end = min(page->snapshot->count, page->offset + page->size);
+-    for (i = page->offset; i < end; i++) if (!callback(&page->snapshot->products[i], arg)) break;
++    TRACE( "handle %p, count %u, offset %u, size %u.\n", handle, page->snapshot->count, page->offset, page->size );
++    for (i = page->offset; i < end; i++)
++    {
++        TRACE( "  product %s kind %#x inCollection %d\n", debugstr_a( page->snapshot->products[i].storeId ), page->snapshot->products[i].productKind, page->snapshot->products[i].isInUserCollection );
++        if (!callback(&page->snapshot->products[i], arg)) break;
++    }
+     entitled_page_release(page); return S_OK;
+ }
+ 
+@@ -486,6 +491,7 @@
+     BOOLEAN more;
+     if (!page) return FALSE;
+     more = entitled_page_valid(page) && page->offset + page->size < page->snapshot->count;
++    TRACE( "handle %p -> %d.\n", handle, more );
+     entitled_page_release(page); return more;
+ }
+ 
