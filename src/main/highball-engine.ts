@@ -14,6 +14,26 @@ export const HIGHBALL_ENGINE_SHA256_ASSET = `${HIGHBALL_ENGINE_ASSET}.sha256`;
 export const HIGHBALL_ENGINE_SIZE = 334_884_359;
 export const HIGHBALL_ENGINE_SHA256 = '1d1a130c0108a4bbb88cd289c3c313292868c3b84010eb315801eba43026e3e8';
 
+/**
+ * Runtime libraries the engine's host modules link against (GLib/GStreamer with
+ * plugins, GnuTLS, ...), which Highball installs into <engine>/frameworks from the
+ * same pinned archive as its x64 CrossOver 26.3 engine manifests.
+ */
+export interface HighballFrameworks {
+  url: string;
+  size: number;
+  sha256: string;
+  /** Folder inside the archive whose contents become <engine>/frameworks. */
+  subpath: string;
+}
+
+export const HIGHBALL_FRAMEWORKS: HighballFrameworks = {
+  url: 'https://github.com/Sikarugir-App/Wrapper/releases/download/v1.0/Template-1.0.11.tar.xz',
+  size: 84_533_420,
+  sha256: '9fa15479e7ff6abd99c1d07be285fb95f41fc6991586502427152b1f7d6ccb8a',
+  subpath: 'Template-1.0.11.app/Contents/Frameworks',
+};
+
 export interface HighballRelease {
   tag: string;
   asset: string;
@@ -21,6 +41,7 @@ export interface HighballRelease {
   size: number;
   sha256: string;
   baseUrl: string;
+  frameworks?: HighballFrameworks;
 }
 
 export const HIGHBALL_ENGINE_RELEASE: HighballRelease = {
@@ -30,6 +51,7 @@ export const HIGHBALL_ENGINE_RELEASE: HighballRelease = {
   size: HIGHBALL_ENGINE_SIZE,
   sha256: HIGHBALL_ENGINE_SHA256,
   baseUrl: `https://github.com/gauthierpiarrette/highball-engine/releases/download/${HIGHBALL_ENGINE_TAG}`,
+  frameworks: HIGHBALL_FRAMEWORKS,
 };
 
 export type Fetcher = (url: string, init?: { signal?: AbortSignal }) => Promise<Response>;
@@ -37,6 +59,7 @@ export type Fetcher = (url: string, init?: { signal?: AbortSignal }) => Promise<
 const PREFIX = 'xbox-highball';
 const RUNNER = 'xodus-highball-wine';
 const REQUIRED_FILES = ['engine/bin/wine', 'engine/bin/wineserver', 'engine/lib/wine/x86_64-windows/kernelbase.dll'];
+const FRAMEWORKS_MARKER = 'GStreamer.framework/Versions/1.0/lib/libgstreamer-1.0.0.dylib';
 /** Same rules as the per-game profile values: they are embedded in a shell script. */
 const SAFE_ENV_KEY = /^[A-Z_][A-Z0-9_]*$/;
 const SAFE_ENV_VALUE = /^[\w .:+-]{1,64}$/;
@@ -53,10 +76,14 @@ function layoutComplete(root: string): boolean {
   return REQUIRED_FILES.every((file) => existsSync(path.join(root, file)));
 }
 
-/** The engine root (holding engine/bin/wine) when the pinned engine is fully installed. */
+function frameworksComplete(root: string, release: HighballRelease): boolean {
+  return !release.frameworks || existsSync(path.join(root, 'frameworks', FRAMEWORKS_MARKER));
+}
+
+/** The engine root (holding engine/bin/wine) when the pinned engine and its frameworks are fully installed. */
 export function highballEngineInstalled(dataRoot: string, release: HighballRelease = HIGHBALL_ENGINE_RELEASE): string | undefined {
   const root = highballEngineDirectory(dataRoot, release);
-  return layoutComplete(root) ? root : undefined;
+  return layoutComplete(root) && frameworksComplete(root, release) ? root : undefined;
 }
 
 function unsafeEntry(entry: string): boolean {
@@ -65,11 +92,54 @@ function unsafeEntry(entry: string): boolean {
   return entry.split('/').includes('..');
 }
 
+/** Streams url into a new file, enforcing the pinned size and SHA-256. */
+async function downloadVerified(
+  url: string,
+  size: number,
+  sha256: string,
+  file: string,
+  label: string,
+  fetcher: Fetcher,
+  onProgress?: (downloaded: number, total: number) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetcher(url, { signal });
+  if (!response.ok || !response.body) throw new Error(`Download ${label} non riuscito (HTTP ${response.status}).`);
+  const handle = await fs.open(file, 'wx', 0o600);
+  try {
+    const hash = createHash('sha256');
+    let downloaded = 0;
+    for await (const chunk of response.body as AsyncIterable<Uint8Array>) {
+      downloaded += chunk.length;
+      if (downloaded > size) throw new Error(`Il download ${label} ha una dimensione inattesa (oltre ${size} byte).`);
+      let offset = 0;
+      while (offset < chunk.length) {
+        const { bytesWritten } = await handle.write(chunk, offset, chunk.length - offset);
+        if (bytesWritten === 0) throw new Error(`Il download ${label} ha smesso di scrivere sul disco.`);
+        offset += bytesWritten;
+      }
+      hash.update(chunk);
+      onProgress?.(downloaded, size);
+    }
+    if (downloaded !== size) throw new Error(`Il download ${label} ha una dimensione inattesa (${downloaded} byte invece di ${size}).`);
+    if (hash.digest('hex') !== sha256) throw new Error(`Verifica SHA-256 ${label} non riuscita: il file scaricato è stato scartato.`);
+  } finally {
+    await handle.close();
+  }
+}
+
+/** Lists the archive with the system tar and refuses absolute or parent-relative entries. */
+async function checkArchiveEntries(archive: string, label: string): Promise<void> {
+  const listing = await run('tar', ['-tf', archive], { maxOutput: 64_000_000 });
+  if (listing.code !== 0) throw new Error(`Lettura dell'archivio ${label} non riuscita (codice ${listing.code}).`);
+  if (listing.output.split('\n').map((line) => line.trim()).some(unsafeEntry)) throw new Error(`L'archivio ${label} contiene percorsi non sicuri: installazione annullata.`);
+}
+
 /**
  * Downloads the pinned engine to a temporary file, verifies size and SHA-256
  * (pinned and published), extracts it with the system tar into a staging folder
- * and renames that folder into place. Nothing from the download is executed
- * before it is verified.
+ * and renames that folder into place, then adds the pinned runtime frameworks
+ * when they are missing. Nothing from a download is executed before it is verified.
  */
 export async function installHighballEngine(
   dataRoot: string,
@@ -80,13 +150,27 @@ export async function installHighballEngine(
 ): Promise<string> {
   const installed = highballEngineInstalled(dataRoot, release);
   if (installed) return installed;
+  const destination = highballEngineDirectory(dataRoot, release);
+  if (!layoutComplete(destination)) await installEngine(dataRoot, destination, fetcher, onProgress, release, signal);
+  if (release.frameworks && !frameworksComplete(destination, release)) {
+    await installFrameworks(dataRoot, destination, release.frameworks, fetcher, onProgress, signal);
+  }
+  return destination;
+}
+
+async function installEngine(
+  dataRoot: string,
+  destination: string,
+  fetcher: Fetcher,
+  onProgress: ((downloaded: number, total: number) => void) | undefined,
+  release: HighballRelease,
+  signal?: AbortSignal,
+): Promise<void> {
   const engines = enginesDirectory(dataRoot);
   await fs.mkdir(engines, { recursive: true, mode: 0o700 });
   const suffix = `${process.pid}-${Date.now()}`;
   const temporary = path.join(engines, `.download-${suffix}.tar.gz`);
   const staging = path.join(engines, `.staging-${suffix}`);
-  const destination = highballEngineDirectory(dataRoot, release);
-  let handle: Awaited<ReturnType<typeof fs.open>> | undefined;
   try {
     const checksumResponse = await fetcher(`${release.baseUrl}/${release.sha256Asset}`, { signal });
     if (!checksumResponse.ok) throw new Error(`Download del motore Highball non riuscito (HTTP ${checksumResponse.status} sul file .sha256).`);
@@ -95,31 +179,8 @@ export async function installHighballEngine(
       throw new Error('Il checksum pubblicato del motore Highball non corrisponde a quello atteso: download interrotto.');
     }
 
-    const response = await fetcher(`${release.baseUrl}/${release.asset}`, { signal });
-    if (!response.ok || !response.body) throw new Error(`Download del motore Highball non riuscito (HTTP ${response.status}).`);
-    handle = await fs.open(temporary, 'wx', 0o600);
-    const hash = createHash('sha256');
-    let downloaded = 0;
-    for await (const chunk of response.body as AsyncIterable<Uint8Array>) {
-      downloaded += chunk.length;
-      if (downloaded > release.size) throw new Error(`Il motore Highball scaricato ha una dimensione inattesa (oltre ${release.size} byte).`);
-      let offset = 0;
-      while (offset < chunk.length) {
-        const { bytesWritten } = await handle.write(chunk, offset, chunk.length - offset);
-        if (bytesWritten === 0) throw new Error('Il download del motore Highball ha smesso di scrivere sul disco.');
-        offset += bytesWritten;
-      }
-      hash.update(chunk);
-      onProgress?.(downloaded, release.size);
-    }
-    await handle.close();
-    handle = undefined;
-    if (downloaded !== release.size) throw new Error(`Il motore Highball scaricato ha una dimensione inattesa (${downloaded} byte invece di ${release.size}).`);
-    if (hash.digest('hex') !== release.sha256) throw new Error('Verifica SHA-256 del motore Highball non riuscita: il file scaricato è stato scartato.');
-
-    const listing = await run('tar', ['-tzf', temporary], { maxOutput: 64_000_000 });
-    if (listing.code !== 0) throw new Error(`Lettura dell'archivio del motore Highball non riuscita (codice ${listing.code}).`);
-    if (listing.output.split('\n').map((line) => line.trim()).some(unsafeEntry)) throw new Error("L'archivio del motore Highball contiene percorsi non sicuri: installazione annullata.");
+    await downloadVerified(`${release.baseUrl}/${release.asset}`, release.size, release.sha256, temporary, 'del motore Highball', fetcher, onProgress, signal);
+    await checkArchiveEntries(temporary, 'del motore Highball');
 
     await fs.mkdir(staging, { mode: 0o700 });
     const extracted = await run('tar', ['-xzf', temporary, '-C', staging]);
@@ -130,9 +191,40 @@ export async function installHighballEngine(
       // Another install finished first: keep it.
       if (!layoutComplete(destination)) throw error;
     }
-    return destination;
   } finally {
-    await handle?.close().catch(() => undefined);
+    await fs.rm(temporary, { force: true }).catch(() => undefined);
+    await fs.rm(staging, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
+/** Extracts only the archive's frameworks folder and swaps it in as <engine>/frameworks. */
+async function installFrameworks(
+  dataRoot: string,
+  destination: string,
+  frameworks: HighballFrameworks,
+  fetcher: Fetcher,
+  onProgress: ((downloaded: number, total: number) => void) | undefined,
+  signal?: AbortSignal,
+): Promise<void> {
+  const engines = enginesDirectory(dataRoot);
+  const suffix = `${process.pid}-${Date.now()}`;
+  const temporary = path.join(engines, `.download-${suffix}.tar.xz`);
+  const staging = path.join(engines, `.staging-${suffix}`);
+  const label = 'delle librerie del motore Highball';
+  try {
+    await downloadVerified(frameworks.url, frameworks.size, frameworks.sha256, temporary, label, fetcher, onProgress, signal);
+    await checkArchiveEntries(temporary, label);
+
+    await fs.mkdir(staging, { mode: 0o700 });
+    const extracted = await run('tar', ['-xJf', temporary, '-C', staging, frameworks.subpath]);
+    if (extracted.code !== 0) throw new Error(`Estrazione ${label} non riuscita (codice ${extracted.code}).`);
+    const source = path.join(staging, frameworks.subpath);
+    if (!existsSync(path.join(source, FRAMEWORKS_MARKER))) throw new Error(`L'archivio ${label} è incompleto (manca ${FRAMEWORKS_MARKER}).`);
+    const target = path.join(destination, 'frameworks');
+    // The engine tarball ships an empty frameworks folder; anything else left there is incomplete.
+    await fs.rm(target, { recursive: true, force: true });
+    await fs.rename(source, target);
+  } finally {
     await fs.rm(temporary, { force: true }).catch(() => undefined);
     await fs.rm(staging, { recursive: true, force: true }).catch(() => undefined);
   }
@@ -152,9 +244,13 @@ export function highballWrapperScript(engineRoot: string, appleGptkRoot: string,
   const wineserver = shellQuote(path.join(engineRoot, 'engine', 'bin', 'wineserver'));
   const externalDir = path.join(appleGptkRoot, 'external');
   const external = shellQuote(externalDir);
-  // GnuTLS (and friends) come from CrossOver's lib64; the dyld defaults are kept after ours.
-  const libraryPath = shellQuote(`${externalDir}:${crossOverLib64}:`);
-  const frameworkPath = shellQuote(`${externalDir}:`);
+  // The engine's runtime frameworks (GLib/GStreamer and friends, as Highball installs them)
+  // come before CrossOver's lib64, whose GLib is too old for the engine's winegstreamer;
+  // D3DMetal stays first and the dyld defaults are kept after ours.
+  const frameworksDir = path.join(engineRoot, 'frameworks');
+  const gstreamerLib = path.join(frameworksDir, 'GStreamer.framework', 'Versions', '1.0', 'lib');
+  const libraryPath = shellQuote(`${externalDir}:${frameworksDir}:${gstreamerLib}:${crossOverLib64}:`);
+  const frameworkPath = shellQuote(`${externalDir}:${frameworksDir}:`);
   const defaults = Object.fromEntries(safeEnvironment({ WINEMSYNC: '1', WINEESYNC: '0', ...extraEnv }));
   return [
     '#!/bin/sh',
@@ -163,6 +259,10 @@ export function highballWrapperScript(engineRoot: string, appleGptkRoot: string,
     `export CX_D3DMETALPATH=${external}`,
     `export DYLD_FALLBACK_LIBRARY_PATH=${libraryPath}"\${DYLD_FALLBACK_LIBRARY_PATH:-/usr/local/lib:/usr/lib}"`,
     `export DYLD_FALLBACK_FRAMEWORK_PATH=${frameworkPath}"\${DYLD_FALLBACK_FRAMEWORK_PATH:-/Library/Frameworks:/System/Library/Frameworks}"`,
+    // Without these, GStreamer looks for plugins in a Homebrew path that does not exist here
+    // and Media Foundation videos get no H.264/AAC decoders.
+    `export GST_PLUGIN_SYSTEM_PATH=${shellQuote(path.join(gstreamerLib, 'gstreamer-1.0'))}`,
+    `export GST_REGISTRY=${shellQuote(path.join(prefix, '.gstreamer-registry.x86_64.bin'))}`,
     // Values match SAFE_ENV_VALUE, so they cannot break out of the double quotes.
     ...Object.entries(defaults).map(([key, value]) => `export ${key}="\${${key}:-${value}}"`),
     'if [ "${1:-}" = "--nexus-stop-prefix" ]; then',

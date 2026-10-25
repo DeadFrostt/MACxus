@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MAC_RUNTIME_DLLS } from './crossover.js';
 import {
   HIGHBALL_ENGINE_ASSET, HIGHBALL_ENGINE_RELEASE, HIGHBALL_ENGINE_SHA256_ASSET, HIGHBALL_ENGINE_SIZE, HIGHBALL_ENGINE_TAG,
-  highballEngineInstalled, highballWrapperScript, installHighballEngine, prepareHighballRunner, type HighballRelease,
+  HIGHBALL_FRAMEWORKS, highballEngineInstalled, highballWrapperScript, installHighballEngine, prepareHighballRunner, type HighballRelease,
 } from './highball-engine.js';
 
 const temporary: string[] = [];
@@ -35,7 +35,26 @@ async function fakeTarball(base: string, complete = true): Promise<Buffer> {
 }
 
 function release(bytes: Buffer, overrides: Partial<HighballRelease> = {}): HighballRelease {
-  return { ...HIGHBALL_ENGINE_RELEASE, size: bytes.length, sha256: sha(bytes), ...overrides };
+  return { ...HIGHBALL_ENGINE_RELEASE, size: bytes.length, sha256: sha(bytes), frameworks: undefined, ...overrides };
+}
+
+const FRAMEWORKS_ASSET = HIGHBALL_FRAMEWORKS.url.slice(HIGHBALL_FRAMEWORKS.url.lastIndexOf('/') + 1);
+const GSTREAMER_LIB = 'frameworks/GStreamer.framework/Versions/1.0/lib/libgstreamer-1.0.0.dylib';
+
+/** A tiny .tar.xz shaped like the runtime template: <subpath>/GStreamer.framework/... plus a dylib. */
+async function fakeFrameworks(base: string, complete = true): Promise<Buffer> {
+  const tree = path.join(base, 'fw-tree');
+  const frameworks = path.join(tree, HIGHBALL_FRAMEWORKS.subpath);
+  await mkdir(path.join(frameworks, 'GStreamer.framework/Versions/1.0/lib'), { recursive: true });
+  await writeFile(path.join(frameworks, 'libglib-2.0.0.dylib'), 'glib');
+  if (complete) await writeFile(path.join(frameworks, 'GStreamer.framework/Versions/1.0/lib/libgstreamer-1.0.0.dylib'), 'gst');
+  const file = path.join(base, 'frameworks.tar.xz');
+  execFileSync('tar', ['-cJf', file, '-C', tree, '.']);
+  return readFile(file);
+}
+
+function withFrameworks(rel: HighballRelease, bytes: Buffer, overrides: Partial<HighballRelease['frameworks'] & object> = {}): HighballRelease {
+  return { ...rel, frameworks: { ...HIGHBALL_FRAMEWORKS, size: bytes.length, sha256: sha(bytes), ...overrides } };
 }
 
 function fetcherFor(files: Record<string, Buffer | string>, seen: string[] = []) {
@@ -56,6 +75,16 @@ describe('pinned Highball release', () => {
     expect(HIGHBALL_ENGINE_SIZE).toBe(334_884_359);
     expect(HIGHBALL_ENGINE_RELEASE.baseUrl).toBe(`https://github.com/gauthierpiarrette/highball-engine/releases/download/${HIGHBALL_ENGINE_TAG}`);
   });
+
+  it('pins the runtime frameworks Highball installs beside the engine', () => {
+    expect(HIGHBALL_ENGINE_RELEASE.frameworks).toBe(HIGHBALL_FRAMEWORKS);
+    expect(HIGHBALL_FRAMEWORKS).toEqual({
+      url: 'https://github.com/Sikarugir-App/Wrapper/releases/download/v1.0/Template-1.0.11.tar.xz',
+      size: 84_533_420,
+      sha256: '9fa15479e7ff6abd99c1d07be285fb95f41fc6991586502427152b1f7d6ccb8a',
+      subpath: 'Template-1.0.11.app/Contents/Frameworks',
+    });
+  });
 });
 
 describe('highballEngineInstalled', () => {
@@ -69,6 +98,9 @@ describe('highballEngineInstalled', () => {
     expect(highballEngineInstalled(data)).toBeUndefined();
     await mkdir(path.join(root, 'engine/lib/wine/x86_64-windows'), { recursive: true });
     await writeFile(path.join(root, 'engine/lib/wine/x86_64-windows/kernelbase.dll'), '');
+    expect(highballEngineInstalled(data)).toBeUndefined();
+    await mkdir(path.dirname(path.join(root, GSTREAMER_LIB)), { recursive: true });
+    await writeFile(path.join(root, GSTREAMER_LIB), '');
     expect(highballEngineInstalled(data)).toBe(root);
   });
 });
@@ -143,6 +175,66 @@ describe('installHighballEngine', () => {
     expect(highballEngineInstalled(data)).toBeUndefined();
   });
 
+  it('installs the runtime frameworks into the engine root after the engine', async () => {
+    const base = await tmp();
+    const data = path.join(base, 'data');
+    const tarball = await fakeTarball(base);
+    const frameworks = await fakeFrameworks(base);
+    const seen: string[] = [];
+    const rel = withFrameworks(release(tarball), frameworks);
+    const root = await installHighballEngine(data, fetcherFor({
+      [HIGHBALL_ENGINE_ASSET]: tarball,
+      [HIGHBALL_ENGINE_SHA256_ASSET]: `${sha(tarball)}  x\n`,
+      [FRAMEWORKS_ASSET]: frameworks,
+    }, seen), undefined, rel);
+    expect(seen).toContain(HIGHBALL_FRAMEWORKS.url);
+    expect(await readFile(path.join(root, GSTREAMER_LIB), 'utf8')).toBe('gst');
+    expect(await readFile(path.join(root, 'frameworks/libglib-2.0.0.dylib'), 'utf8')).toBe('glib');
+    expect(highballEngineInstalled(data, rel)).toBe(root);
+    expect(await readdir(path.join(data, 'engines/highball'))).toEqual([HIGHBALL_ENGINE_TAG]);
+  });
+
+  it('adds only the frameworks to an engine installed without them', async () => {
+    const base = await tmp();
+    const data = path.join(base, 'data');
+    const tarball = await fakeTarball(base);
+    const frameworks = await fakeFrameworks(base);
+    await installHighballEngine(data, fetcherFor({ [HIGHBALL_ENGINE_ASSET]: tarball, [HIGHBALL_ENGINE_SHA256_ASSET]: `${sha(tarball)}  x\n` }), undefined, release(tarball));
+    const rel = withFrameworks(release(tarball), frameworks);
+    expect(highballEngineInstalled(data, rel)).toBeUndefined();
+    const seen: string[] = [];
+    const root = await installHighballEngine(data, fetcherFor({ [FRAMEWORKS_ASSET]: frameworks }, seen), undefined, rel);
+    expect(seen).toEqual([HIGHBALL_FRAMEWORKS.url]);
+    expect(highballEngineInstalled(data, rel)).toBe(root);
+  });
+
+  it('rejects frameworks whose sha256 differs and leaves them uninstalled', async () => {
+    const base = await tmp();
+    const data = path.join(base, 'data');
+    const tarball = await fakeTarball(base);
+    const frameworks = await fakeFrameworks(base);
+    const rel = withFrameworks(release(tarball), frameworks, { sha256: 'c'.repeat(64) });
+    await expect(installHighballEngine(data, fetcherFor({
+      [HIGHBALL_ENGINE_ASSET]: tarball,
+      [HIGHBALL_ENGINE_SHA256_ASSET]: `${sha(tarball)}  x\n`,
+      [FRAMEWORKS_ASSET]: frameworks,
+    }), undefined, rel)).rejects.toThrow(/SHA-256/);
+    expect(highballEngineInstalled(data, rel)).toBeUndefined();
+    expect((await readdir(path.join(data, 'engines/highball'))).filter((name) => name.startsWith('.'))).toEqual([]);
+  });
+
+  it('rejects a frameworks archive without GStreamer', async () => {
+    const base = await tmp();
+    const data = path.join(base, 'data');
+    const tarball = await fakeTarball(base);
+    const frameworks = await fakeFrameworks(base, false);
+    await expect(installHighballEngine(data, fetcherFor({
+      [HIGHBALL_ENGINE_ASSET]: tarball,
+      [HIGHBALL_ENGINE_SHA256_ASSET]: `${sha(tarball)}  x\n`,
+      [FRAMEWORKS_ASSET]: frameworks,
+    }), undefined, withFrameworks(release(tarball), frameworks))).rejects.toThrow(/incomplet/);
+  });
+
   it('returns the existing install without downloading again', async () => {
     const base = await tmp();
     const data = path.join(base, 'data');
@@ -163,8 +255,13 @@ describe('highballWrapperScript', () => {
     expect(script).toContain(`export WINEPREFIX='/b/xbox-highball'"'"'s'`);
     expect(script).toContain("export WINEDLLPATH_PREPEND='/Apps/Cross Over/apple_gptk/wine'");
     expect(script).toContain("export CX_D3DMETALPATH='/Apps/Cross Over/apple_gptk/external'");
-    expect(script).toContain(`export DYLD_FALLBACK_LIBRARY_PATH='/Apps/Cross Over/apple_gptk/external:/Apps/Cross Over/lib64:'"\${DYLD_FALLBACK_LIBRARY_PATH:-/usr/local/lib:/usr/lib}"`);
-    expect(script).toContain(`export DYLD_FALLBACK_FRAMEWORK_PATH='/Apps/Cross Over/apple_gptk/external:'"\${DYLD_FALLBACK_FRAMEWORK_PATH:-/Library/Frameworks:/System/Library/Frameworks}"`);
+    expect(script).toContain(`export DYLD_FALLBACK_LIBRARY_PATH='/Apps/Cross Over/apple_gptk/external:/Data Root/engine root/frameworks:/Data Root/engine root/frameworks/GStreamer.framework/Versions/1.0/lib:/Apps/Cross Over/lib64:'"\${DYLD_FALLBACK_LIBRARY_PATH:-/usr/local/lib:/usr/lib}"`);
+    expect(script).toContain(`export DYLD_FALLBACK_FRAMEWORK_PATH='/Apps/Cross Over/apple_gptk/external:/Data Root/engine root/frameworks:'"\${DYLD_FALLBACK_FRAMEWORK_PATH:-/Library/Frameworks:/System/Library/Frameworks}"`);
+  });
+
+  it('points GStreamer at the engine runtime plugins with a registry inside the prefix', () => {
+    expect(script).toContain("export GST_PLUGIN_SYSTEM_PATH='/Data Root/engine root/frameworks/GStreamer.framework/Versions/1.0/lib/gstreamer-1.0'");
+    expect(script).toContain(`export GST_REGISTRY='/b/xbox-highball'"'"'s/.gstreamer-registry.x86_64.bin'`);
   });
 
   it('defaults msync on and esync off unless already set, and adds profile env the same way', () => {
