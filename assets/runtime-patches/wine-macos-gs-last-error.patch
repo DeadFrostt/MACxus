@@ -1,0 +1,29 @@
+--- a/include/winbase.h
++++ b/include/winbase.h
+@@ -2690,7 +2690,15 @@
+ 
+ static FORCEINLINE DWORD WINAPI GetLastError(void)
+ {
++#if defined(__x86_64__) && defined(__GNUC__)
++    /* Read through %gs like ntdll does: on macOS the %gs block is not the TEB
++     * itself and keeps its own copy of the last error. */
++    DWORD err;
++    __asm__ __volatile__( "movl %%gs:0x68,%0" : "=r" (err) );
++    return err;
++#else
+     return *(DWORD *)((void **)NtCurrentTeb() + 13);
++#endif
+ }
+ 
+ static FORCEINLINE HANDLE WINAPI GetProcessHeap(void)
+@@ -2701,6 +2709,10 @@
+ static FORCEINLINE void WINAPI SetLastError( DWORD err )
+ {
+     *(DWORD *)((void **)NtCurrentTeb() + 13) = err;
++#if defined(__x86_64__) && defined(__GNUC__)
++    /* Keep the %gs copy in sync as well (same location where %gs is the TEB). */
++    __asm__ __volatile__( "movl %0,%%gs:0x68" : : "r" (err) : "memory" );
++#endif
+ }
+ 
+ #else  /* __WINESRC__ */

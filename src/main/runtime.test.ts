@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { MAC_RUNTIME_DLLS } from './crossover.js';
 import { canonicalSnapshotName, nexusReleaseName, previewBaseRelease, RuntimeManager } from './runtime.js';
 import { run } from './process.js';
 
@@ -166,7 +167,7 @@ describe('previewBaseRelease', () => {
       await fs.mkdir(dlls, { recursive: true });
       // A Linux ELF stand-in: present but neither executable nor runnable here.
       await fs.writeFile(winePath, '\x7fELF not for macOS', { mode: 0o644 });
-      for (const name of ['xgameruntime.dll', 'windows.web.dll', 'twinapi.appcore.dll', 'gamingtcui.dll']) await fs.writeFile(path.join(dlls, name), 'MZ');
+      for (const name of MAC_RUNTIME_DLLS) await fs.writeFile(path.join(dlls, name), 'MZ');
       await fs.writeFile(path.join(release, 'XODUS_NEXUS_PATCH.json'), JSON.stringify({ features: [] }));
       await fs.writeFile(path.join(root, 'current.json'), JSON.stringify({ name: 'xodus-nexus-runtime-test', winePath, commit: 'c', installedAt: 'now' }));
       const status = await new RuntimeManager(root, () => undefined, () => false, fetch, 'darwin').refresh();

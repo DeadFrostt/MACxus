@@ -4,7 +4,12 @@ import path from 'node:path';
 import { run, type RunResult } from './process.js';
 import type { ProtonRunner } from './proton.js';
 
-export const MAC_RUNTIME_DLLS = ['xgameruntime.dll', 'windows.web.dll', 'twinapi.appcore.dll', 'gamingtcui.dll'] as const;
+/**
+ * Runtime DLLs copied into the prefix as native. The engine's own winhttp rejects
+ * WINHTTP_OPTION_IPV6_FAST_FALLBACK, which XCurl (GDK libcurl) treats as fatal; the
+ * runtime's winhttp accepts it and loads libnghttp2.dll from system32 for HTTP/2.
+ */
+export const MAC_RUNTIME_DLLS = ['xgameruntime.dll', 'windows.web.dll', 'twinapi.appcore.dll', 'gamingtcui.dll', 'winhttp.dll', 'libnghttp2.dll'] as const;
 
 export interface CrossOverInstall {
   root: string;
