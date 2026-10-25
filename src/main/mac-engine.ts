@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import type { MacEngine } from '../shared/types.js';
 import { findCrossOver, prepareCrossOverRunner, runtimeOverrideDirectory, type CrossOverInstall, type RuntimeDllSource } from './crossover.js';
-import { highballEngineInstalled, prepareHighballRunner } from './highball-engine.js';
+import { highballEngineInstalled, highballOverrideDirectory, prepareHighballRunner } from './highball-engine.js';
 import { CROSSOVER_MISSING } from './mac-launch.js';
 import { effectiveMacEngine, loadMacProfiles, macProfileFor, type MacProfiles } from './mac-profiles.js';
 import type { ProtonRunner } from './proton.js';
@@ -22,7 +22,7 @@ export interface MacRunnerDeps {
   findCrossOver: () => Promise<CrossOverInstall | undefined>;
   highballInstalled: (dataRoot: string) => string | undefined;
   prepareCrossOver: (cx: CrossOverInstall, bottlesRoot: string, runtimeDlls: RuntimeDllSource, log: (line: string) => void) => Promise<ProtonRunner>;
-  prepareHighball: (engineRoot: string, appleGptk: string, crossOverLib64: string, bottlesRoot: string, runtimeDlls: RuntimeDllSource, extraEnv: Record<string, string>, log: (line: string) => void) => Promise<ProtonRunner>;
+  prepareHighball: (engineRoot: string, appleGptk: string, crossOverLib64: string, bottlesRoot: string, runtimeDlls: RuntimeDllSource, extraEnv: Record<string, string>, log: (line: string) => void, engineOverrideDir: string) => Promise<ProtonRunner>;
   profiles: () => Promise<MacProfiles>;
 }
 
@@ -69,7 +69,7 @@ export async function prepareMacRunner(request: MacRunnerRequest, deps: MacRunne
     if (!highball) throw new Error(HIGHBALL_MISSING);
     const gptk = appleGptkRoot(crossOver);
     request.log(`Motore Wine: Highball (${highball}); D3DMetal da ${gptk}; ${profileText}.`);
-    return { runner: await deps.prepareHighball(highball, gptk, path.join(crossOver!.root, 'lib64'), bottlesRoot, runtimeDlls, profileEnv, request.log), engine, profileEnv };
+    return { runner: await deps.prepareHighball(highball, gptk, path.join(crossOver!.root, 'lib64'), bottlesRoot, runtimeDlls, profileEnv, request.log, highballOverrideDirectory(request.dataRoot)), engine, profileEnv };
   }
   if (!crossOver) throw new Error(CROSSOVER_MISSING);
   request.log(`Motore Wine: CrossOver ${crossOver.version || ''}`.trimEnd() + `; ${profileText}.`);

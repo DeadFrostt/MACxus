@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MAC_RUNTIME_DLLS } from './crossover.js';
 import {
   HIGHBALL_ENGINE_ASSET, HIGHBALL_ENGINE_RELEASE, HIGHBALL_ENGINE_SHA256_ASSET, HIGHBALL_ENGINE_SIZE, HIGHBALL_ENGINE_TAG,
-  HIGHBALL_FRAMEWORKS, highballEngineInstalled, highballWrapperScript, installHighballEngine, prepareHighballRunner, type HighballRelease,
+  HIGHBALL_FRAMEWORKS, highballEngineInstalled, installHighballEngineOverrides, highballWrapperScript, installHighballEngine, prepareHighballRunner, type HighballRelease,
 } from './highball-engine.js';
 
 const temporary: string[] = [];
@@ -366,6 +366,22 @@ describe('prepareHighballRunner', () => {
     expect(logs).toEqual([]);
   }, 30_000);
 
+  it('applies the engine overrides before writing the wrapper', async () => {
+    const base = await tmp();
+    const engine = await fakeEngine(base, path.join(base, 'log'));
+    const lib = path.join(engine, 'engine/lib/wine/x86_64-windows');
+    await mkdir(lib, { recursive: true });
+    await writeFile(path.join(lib, 'winegstreamer.dll'), 'stock');
+    const overrides = path.join(base, 'highball-overrides');
+    await mkdir(overrides);
+    await writeFile(path.join(overrides, 'winegstreamer.dll'), 'patched');
+    const runtime = path.join(base, 'runtime');
+    await mkdir(runtime);
+    for (const name of MAC_RUNTIME_DLLS) await writeFile(path.join(runtime, name), dll());
+    await prepareHighballRunner(engine, '/gptk', '/gptk-lib64', path.join(base, 'bottles'), runtime, {}, () => undefined, overrides);
+    expect(await readFile(path.join(lib, 'winegstreamer.dll'), 'utf8')).toBe('patched');
+  });
+
   it('reports a prefix that wineboot did not create', async () => {
     const base = await tmp();
     const log = path.join(base, 'log');
@@ -376,4 +392,64 @@ describe('prepareHighballRunner', () => {
     for (const name of MAC_RUNTIME_DLLS) await writeFile(path.join(runtime, name), dll());
     await expect(prepareHighballRunner(engine, '/gptk', '/gptk-lib64', path.join(base, 'bottles'), runtime, {})).rejects.toThrow(/prefisso Highball/);
   }, 30_000);
+});
+
+describe('installHighballEngineOverrides', () => {
+  async function setup() {
+    const base = await tmp();
+    const engine = path.join(base, 'engine root');
+    const lib = path.join(engine, 'engine/lib/wine/x86_64-windows');
+    const prefix = path.join(base, 'prefix');
+    const system32 = path.join(prefix, 'drive_c/windows/system32');
+    const overrides = path.join(base, 'highball-overrides');
+    await mkdir(lib, { recursive: true });
+    await mkdir(system32, { recursive: true });
+    await mkdir(overrides);
+    await writeFile(path.join(lib, 'winegstreamer.dll'), 'stock gst');
+    await writeFile(path.join(system32, 'winegstreamer.dll'), 'stock gst');
+    await writeFile(path.join(lib, 'mfplat.dll'), 'stock mfplat');
+    return { engine, lib, prefix, system32, overrides };
+  }
+
+  it('replaces the engine builtin and the prefix copy, keeping the original once', async () => {
+    const { engine, lib, prefix, system32, overrides } = await setup();
+    await writeFile(path.join(overrides, 'winegstreamer.dll'), 'patched gst');
+    const logs: string[] = [];
+    expect(await installHighballEngineOverrides(engine, prefix, overrides, (line) => logs.push(line))).toEqual(['winegstreamer.dll']);
+    expect(await readFile(path.join(lib, 'winegstreamer.dll'), 'utf8')).toBe('patched gst');
+    expect(await readFile(path.join(system32, 'winegstreamer.dll'), 'utf8')).toBe('patched gst');
+    expect(await readFile(path.join(engine, 'overrides-original/winegstreamer.dll'), 'utf8')).toBe('stock gst');
+    expect(await readFile(path.join(lib, 'mfplat.dll'), 'utf8')).toBe('stock mfplat');
+    expect(logs.join('\n')).toContain('winegstreamer.dll');
+    expect(await installHighballEngineOverrides(engine, prefix, overrides)).toEqual([]);
+    expect(await readFile(path.join(engine, 'overrides-original/winegstreamer.dll'), 'utf8')).toBe('stock gst');
+  });
+
+  it('does not create a prefix copy the prefix did not have', async () => {
+    const { engine, prefix, system32, overrides } = await setup();
+    await writeFile(path.join(overrides, 'mfplat.dll'), 'patched mfplat');
+    expect(await installHighballEngineOverrides(engine, prefix, overrides)).toEqual(['mfplat.dll']);
+    await expect(stat(path.join(system32, 'mfplat.dll'))).rejects.toThrow();
+  });
+
+  it('restores the original when the override is removed', async () => {
+    const { engine, lib, prefix, system32, overrides } = await setup();
+    await writeFile(path.join(overrides, 'winegstreamer.dll'), 'patched gst');
+    await installHighballEngineOverrides(engine, prefix, overrides);
+    await rm(path.join(overrides, 'winegstreamer.dll'));
+    expect(await installHighballEngineOverrides(engine, prefix, overrides)).toEqual(['winegstreamer.dll']);
+    expect(await readFile(path.join(lib, 'winegstreamer.dll'), 'utf8')).toBe('stock gst');
+    expect(await readFile(path.join(system32, 'winegstreamer.dll'), 'utf8')).toBe('stock gst');
+    await expect(stat(path.join(engine, 'overrides-original/winegstreamer.dll'))).rejects.toThrow();
+  });
+
+  it('ignores DLLs the engine does not ship and a missing override folder', async () => {
+    const { engine, lib, prefix, overrides } = await setup();
+    await writeFile(path.join(overrides, 'notawinedll.dll'), 'x');
+    const logs: string[] = [];
+    expect(await installHighballEngineOverrides(engine, prefix, overrides, (line) => logs.push(line))).toEqual([]);
+    await expect(stat(path.join(lib, 'notawinedll.dll'))).rejects.toThrow();
+    expect(logs.join('\n')).toContain('notawinedll.dll');
+    expect(await installHighballEngineOverrides(engine, prefix, path.join(overrides, 'missing'))).toEqual([]);
+  });
 });

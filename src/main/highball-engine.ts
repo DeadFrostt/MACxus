@@ -278,9 +278,69 @@ export function highballWrapperScript(engineRoot: string, appleGptkRoot: string,
   ].join('\n');
 }
 
+export function highballOverrideDirectory(dataRoot: string): string {
+  return path.join(dataRoot, 'highball-overrides');
+}
+
+async function readOptional(file: string): Promise<Buffer | undefined> {
+  try { return await fs.readFile(file); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
+async function replaceFile(target: string, bytes: Buffer): Promise<void> {
+  const temporary = `${target}.nexus-${process.pid}`;
+  try {
+    await fs.writeFile(temporary, bytes, { mode: 0o644 });
+    await fs.rename(temporary, target);
+  } finally { await fs.unlink(temporary).catch(() => undefined); }
+}
+
+/**
+ * Swaps engine builtins (x86_64-windows) for the DLLs in overrideDir, e.g. a
+ * winegstreamer built from the same CrossOver sources with extra patches. They stay
+ * builtin, so their unix libraries still load. The engine's original is kept once in
+ * <engine>/overrides-original and put back when its override is removed; the prefix's
+ * system32 copy follows the engine's. Returns the DLL names that changed.
+ */
+export async function installHighballEngineOverrides(engineRoot: string, prefix: string, overrideDir: string, log: (line: string) => void = () => undefined): Promise<string[]> {
+  const lib = path.join(engineRoot, 'engine', 'lib', 'wine', 'x86_64-windows');
+  const originals = path.join(engineRoot, 'overrides-original');
+  const system32 = path.join(prefix, 'drive_c', 'windows', 'system32');
+  const listDlls = async (dir: string) => (await fs.readdir(dir).catch(() => [] as string[])).filter((name) => /^[\w.-]+\.dll$/i.test(name));
+  const changed: string[] = [];
+  const install = async (name: string, bytes: Buffer) => {
+    let updated = false;
+    if (!(await readOptional(path.join(lib, name)))?.equals(bytes)) { await replaceFile(path.join(lib, name), bytes); updated = true; }
+    const copy = await readOptional(path.join(system32, name));
+    if (copy && !copy.equals(bytes)) { await replaceFile(path.join(system32, name), bytes); updated = true; }
+    if (updated) changed.push(name);
+  };
+
+  const wanted = await listDlls(overrideDir);
+  for (const name of wanted) {
+    const original = await readOptional(path.join(lib, name));
+    if (!original) { log(`Override Highball ignorato: ${name} non è una DLL del motore.`); continue; }
+    if (!(await readOptional(path.join(originals, name)))) {
+      await fs.mkdir(originals, { recursive: true });
+      await replaceFile(path.join(originals, name), original);
+    }
+    await install(name, await fs.readFile(path.join(overrideDir, name)));
+  }
+  for (const name of await listDlls(originals)) {
+    if (wanted.includes(name)) continue;
+    await install(name, await fs.readFile(path.join(originals, name)));
+    await fs.rm(path.join(originals, name));
+  }
+  if (changed.length) log(`DLL del motore Highball aggiornate da ${overrideDir}: ${changed.join(', ')}.`);
+  return changed;
+}
+
 /**
  * Prepares the Highball prefix <bottlesRoot>/xbox-highball (separate from the
- * CrossOver bottle), installs the runtime DLLs as native and writes the wrapper.
+ * CrossOver bottle), installs the runtime DLLs as native, applies the engine
+ * overrides (see installHighballEngineOverrides) and writes the wrapper.
  */
 export async function prepareHighballRunner(
   engineRoot: string,
@@ -290,6 +350,7 @@ export async function prepareHighballRunner(
   runtimeDlls: string | RuntimeDllSource,
   extraEnv: Record<string, string> = {},
   log: (line: string) => void = () => undefined,
+  engineOverrideDir?: string,
 ): Promise<ProtonRunner> {
   const wine = path.join(engineRoot, 'engine', 'bin', 'wine');
   const wineserver = path.join(engineRoot, 'engine', 'bin', 'wineserver');
@@ -314,6 +375,7 @@ export async function prepareHighballRunner(
 
   const changed = await installRuntimeDlls(prefix, runtimeDlls, log);
   await ensureRuntimeOverrides(prefix, !existed || changed.length > 0, (name) => run(wine, dllOverrideArgs(name), { env }), 'Highball prefix');
+  if (engineOverrideDir) await installHighballEngineOverrides(engineRoot, prefix, engineOverrideDir, log);
 
   const runner = path.join(bottlesRoot, RUNNER);
   await writeRunnerScript(runner, highballWrapperScript(engineRoot, appleGptkRoot, crossOverLib64, prefix, extraEnv));
