@@ -13,6 +13,19 @@ export function antiCheatEnvironment(
   return result;
 }
 
+/**
+ * Per-game opt-in for offline play: start the EAC target directly with the EOS
+ * Null Client. EOS reports no anti-cheat, so protected online features stay
+ * unavailable. Returns false when the game declares no EAC target.
+ */
+export function offlineAntiCheatLaunch(args: string[], environment: NodeJS.ProcessEnv, target: string | undefined): boolean {
+  const exe = args.indexOf('--exe');
+  if (!target?.trim() || exe < 0 || exe + 1 >= args.length) return false;
+  args[exe + 1] = target;
+  environment.EOS_USE_ANTICHEATCLIENTNULL = '1';
+  return true;
+}
+
 /** Discover an already installed official Steam tool; never download or copy it. */
 export async function installedEacRuntime(steamRoot: string): Promise<string | undefined> {
   const libraries = new Set([steamRoot]);

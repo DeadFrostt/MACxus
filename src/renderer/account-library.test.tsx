@@ -122,6 +122,16 @@ it('offers saved per-game overlay options and Steam-style environment and argume
   expect(html).toContain('checked');
 });
 
+it('offers offline play without anti-cheat only for EAC games, off by default', () => {
+  const render = (antiCheat: boolean, enabled = false) => renderToStaticMarkup(<GameLaunchToolFields value={{ ...defaultLaunchTools, offlineWithoutAntiCheat: enabled }} change={() => {}} antiCheat={antiCheat} />);
+  expect(render(false)).not.toContain('Play offline without anti-cheat');
+  const off = render(true), on = render(true, true);
+  expect(off).toContain('Play offline without anti-cheat');
+  expect(off).toContain('online multiplayer and other protected features will not work');
+  expect(off).not.toContain('checked');
+  expect(on).toContain('checked');
+});
+
 it('offers DualSense compatibility per game, off by default and with feature limitations', () => {
   const render = (enabled: boolean) => renderToStaticMarkup(<GameLaunchToolFields value={{ ...defaultLaunchTools, dualSenseCompatibility:enabled }} change={() => {}} />);
   const off = render(false), on = render(true);

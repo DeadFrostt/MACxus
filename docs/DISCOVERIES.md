@@ -60,6 +60,9 @@ Some packages (Gears of War: E-Day) include the Windows GDK runtime next to the 
 ### 16. Games that require ray tracing
 Gears of War: E-Day requires a GPU with DirectX Raytracing and has no raster fallback. On M1 the game stops with a "ray tracing required" message. As far as we know, D3DMetal exposes DXR only on Apple GPUs with hardware ray tracing (M3 and newer); this was not measured with a probe. Faking the capability would only move the crash into the DXR calls. These games need M3 or newer.
 
+### 17. Easy Anti-Cheat and offline play
+Under Wine, the EAC bootstrapper downloads its **Linux** module (an ELF library) and maps it through the Unix side of Wine, as Proton does. macOS cannot load ELF, so the launch ends with "Failed to map the anti-cheat module" (Xodus exit 206; log in the prefix under `AppData/Roaming/EasyAntiCheat/.../anticheatlauncher.log`). EAC has no "Wine on macOS" variant. For games whose campaign also works offline, the per-game launch tool **Play offline without anti-cheat** (shown only for EAC games, off by default) starts the executable named in `EasyAntiCheat/Settings.json` directly, with the EOS SDK's `EOS_USE_ANTICHEATCLIENTNULL=1`. EOS then knows there is no anti-cheat client, so protected online features are refused. Do not try to play online in this mode: the game still signs in to Xbox services, and what happens to your account is your responsibility.
+
 ---
 
 ## Italiano
@@ -114,6 +117,9 @@ Alcuni pacchetti (Gears of War: E-Day) contengono il runtime GDK di Windows acca
 
 ### 16. Giochi che richiedono il ray tracing
 Gears of War: E-Day richiede una GPU con DirectX Raytracing e non ha un'alternativa raster. Su M1 il gioco si ferma con il messaggio "ray tracing richiesto". Per quanto ne sappiamo, D3DMetal espone DXR solo sulle GPU Apple con ray tracing hardware (M3 e successivi); non è stato misurato con un probe. Simulare il supporto sposterebbe solo il crash dentro le chiamate DXR. Per questi giochi serve un M3 o successivo.
+
+### 17. Easy Anti-Cheat e gioco offline
+Sotto Wine il bootstrapper di EAC scarica il proprio modulo **Linux** (una libreria ELF) e lo carica tramite la parte Unix di Wine, come fa Proton. macOS non può caricare gli ELF, quindi l'avvio termina con "Failed to map the anti-cheat module" (Xodus esce con 206; il log è nel prefix in `AppData/Roaming/EasyAntiCheat/.../anticheatlauncher.log`). EAC non ha una variante "Wine su macOS". Per i giochi la cui campagna funziona anche offline, l'opzione per gioco **Play offline without anti-cheat** (visibile solo per i giochi EAC, disattivata di default) avvia direttamente l'eseguibile indicato in `EasyAntiCheat/Settings.json`, con la variabile dell'SDK EOS `EOS_USE_ANTICHEATCLIENTNULL=1`. EOS sa quindi che manca il client anti-cheat e rifiuta le funzioni online protette. Non tentare di giocare online in questa modalità: il gioco accede comunque ai servizi Xbox e le conseguenze per l'account sono responsabilità tua.
 
 ---
 

@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { antiCheatEnvironment, installedEacRuntime } from './anti-cheat.js';
+import { antiCheatEnvironment, installedEacRuntime, offlineAntiCheatLaunch } from './anti-cheat.js';
 
 const temporary: string[] = [];
 afterEach(async () => { await Promise.all(temporary.splice(0).map((root) => rm(root, { recursive: true, force: true }))); });
@@ -31,6 +31,25 @@ describe('anti-cheat launch environment', () => {
   it('never enables the Null Client on the shared Play path', () => {
     const original = { PATH: '/bin' };
     expect(antiCheatEnvironment(original)).toEqual(original);
+  });
+});
+
+describe('offline launch without anti-cheat', () => {
+  it('starts the EAC target with the Null Client when opted in', () => {
+    const args = ['run', '/game', 'wine', '--exe', 'start_protected_game.exe', '--materialize-chain'];
+    const environment: NodeJS.ProcessEnv = { PATH: '/bin' };
+    expect(offlineAntiCheatLaunch(args, environment, 'Game\\Binaries\\WinGDK\\Game.exe')).toBe(true);
+    expect(args).toEqual(['run', '/game', 'wine', '--exe', 'Game\\Binaries\\WinGDK\\Game.exe', '--materialize-chain']);
+    expect(environment.EOS_USE_ANTICHEATCLIENTNULL).toBe('1');
+  });
+
+  it('changes nothing without a declared EAC target', () => {
+    const args = ['run', '/game', 'wine', '--exe', 'start_protected_game.exe'];
+    const environment: NodeJS.ProcessEnv = {};
+    expect(offlineAntiCheatLaunch(args, environment, undefined)).toBe(false);
+    expect(offlineAntiCheatLaunch(args, environment, ' ')).toBe(false);
+    expect(args[4]).toBe('start_protected_game.exe');
+    expect(environment).not.toHaveProperty('EOS_USE_ANTICHEATCLIENTNULL');
   });
 });
 

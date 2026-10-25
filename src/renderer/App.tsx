@@ -567,9 +567,11 @@ function GameContentDialog({ game, data, close, toast }: { game: Game; data: App
   </section></div>;
 }
 
-export function GameLaunchToolFields({ value, change }: { value: GameLaunchTools; change: (value: GameLaunchTools) => void }) {
+export function GameLaunchToolFields({ value, change, antiCheat = false }: { value: GameLaunchTools; change: (value: GameLaunchTools) => void; antiCheat?: boolean }) {
   const update = (patch: Partial<GameLaunchTools>) => change({ ...value, ...patch });
   return <fieldset className="game-launch-tools"><legend>Launch tools</legend>
+    {antiCheat ? <><label className="tool-checkbox"><input type="checkbox" checked={value.offlineWithoutAntiCheat === true} onChange={event => update({ offlineWithoutAntiCheat: event.target.checked })} /><span>Play offline without anti-cheat</span></label>
+    <small>Easy Anti-Cheat cannot run on macOS. Starts the game executable directly with the EOS Null Client: online multiplayer and other protected features will not work. Do not try to play online in this mode; your account is your responsibility.</small></> : null}
     <label className="tool-checkbox"><input type="checkbox" checked={value.dualSenseCompatibility === true} onChange={event => update({ dualSenseCompatibility: event.target.checked })} /><span>DualSense compatibility mode</span></label>
     <small>Try this if a standard DualSense controller is not detected. Disables its native HIDRAW input for this game only. Advanced haptics and adaptive triggers may be unavailable. Does not change Xbox controller settings.</small>
     <label className="tool-checkbox"><input type="checkbox" checked={value.mangoHud} onChange={event => update({ mangoHud: event.target.checked })} /><span>Enable MangoHud</span></label>
@@ -762,7 +764,7 @@ export function LibraryPage({ data, toast, filters, onFiltersChange, selection }
         <label>Display name<input required value={editTitle} onChange={(event) => setEditTitle(event.target.value)} /></label>
         <label>Game language<select value={editLocale} onChange={(event) => setEditLocale(event.target.value)}><option value="">System default</option>{localeOptions.map((locale) => <option key={locale} value={locale}>{locale}</option>)}{editLocale && !localeOptions.some((locale) => locale.toLowerCase() === editLocale.toLowerCase()) ? <option value={editLocale}>{editLocale}</option> : null}</select></label>
         <p>Available languages come from the game manifest. All games use the active Xodus Runtime.</p>
-        <GameLaunchToolFields value={editTools} change={setEditTools} />
+        <GameLaunchToolFields value={editTools} change={setEditTools} antiCheat={Boolean(modalGame.antiCheat?.executable)} />
         <div className="dialog-actions"><button type="button" className="secondary" disabled={dialogBusy} data-gamepad-cancel onClick={() => setDialogGame(undefined)}>Cancel</button><button className="primary" disabled={dialogBusy || !editTitle.trim()}><Check />Save</button></div>
       </form>}
     </section></div> : null}

@@ -28,7 +28,7 @@ import { assertGameRemovalAvailable, validateGameDeleteTarget } from './game-rem
 import { deleteGameDirectory } from './game-delete.js';
 import { spawnGameProcess, waitForGameExit, type GameProcess } from './game-process.js';
 import { gameLocaleEnvironment, manifestLocales, manifestTitleId, supportedGameLocale } from './game-locale.js';
-import { antiCheatEnvironment } from './anti-cheat.js';
+import { antiCheatEnvironment, offlineAntiCheatLaunch } from './anti-cheat.js';
 import { gameLaunchArguments, preparedGameWine } from './game-launch.js';
 import { prepareGameWrapper, type GameWrapper } from './game-wrapper.js';
 import { normalizeLaunchTools } from '../shared/launch-tools.js';
@@ -1033,6 +1033,9 @@ async function prepareGameLaunch(id: string): Promise<void> {
     const environment = antiCheatEnvironment(gameLocaleEnvironment(gameWindowEnvironment(gameLoggingEnvironment(protonRunner
       ? { ...process.env }
       : { ...process.env, WINEPREFIX: legacyPrefixRoot, WINEARCH: 'win64' }, verboseLogs)), locale));
+    if (game.launchTools?.offlineWithoutAntiCheat && offlineAntiCheatLaunch(args, environment, inspected.antiCheat?.executable)) {
+      addGameLog(`Offline without anti-cheat: launching ${inspected.antiCheat?.executable} with the EOS Null Client. Online features are unavailable.`);
+    }
     // Per-game macOS profile values (whitelisted) apply unless the user already set them.
     for (const [key, value] of Object.entries(macProfileEnv)) if (environment[key] === undefined) environment[key] = value;
     if (isMac && protonRunner) await syncMacDualSenseCompatibility(wineCommand, gamePrefix, game.launchTools?.dualSenseCompatibility === true, environment, addGameLog);
