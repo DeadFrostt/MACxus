@@ -283,6 +283,7 @@ export interface InstallChoice {
   packageFormat: string;
   kind: string;
   supported: boolean;
+  size?: PackageSize;
 }
 
 export interface InstallPlan {
@@ -309,6 +310,12 @@ export interface GameContentPlan {
   items: GameContentItem[];
 }
 
+/** Published Store maxima for one PC content package; not an exact disk-space requirement. */
+export interface PackageSize {
+  downloadBytes?: number;
+  installBytes?: number;
+}
+
 export interface CatalogProduct {
   productId: string;
   installProductId?: string;
@@ -326,6 +333,7 @@ export interface CatalogProduct {
   installability: 'supported' | 'unsupported' | 'unknown';
   packageFormat?: string;
   supportNote: string;
+  size?: PackageSize;
 }
 
 /** Public catalog data only, never an ownership/installation decision. */
@@ -340,6 +348,7 @@ export interface GameStoreDetails {
   releaseDate?: string;
   /** Decimal Xbox title ID from the catalog; lets activity and achievements load before installation. */
   titleId?: string;
+  size?: PackageSize;
 }
 
 export interface GameActivity {
