@@ -47,10 +47,38 @@ static void WINAPI completed(XAsyncBlock *block)
 struct payload_operation
 {
     XAsyncBlock block;
-    DWORD payload, *result;
-    unsigned cleanup, callbacks;
+    DWORD payload, *result, *pending_result;
+    unsigned cleanup, callbacks, get_results;
     BOOL early_result, skip_result;
 };
+
+static void check_consumed_result(struct payload_operation *test)
+{
+    DWORD sentinel = 0x87654321;
+    DWORD *result = &sentinel;
+    SIZE_T used = 123;
+    CHECK(IXThreadingImpl_XAsyncGetResult(threads, &test->block, test,
+        sizeof(result), &result, &used) == E_ILLEGAL_METHOD_CALL);
+    CHECK(result == &sentinel && used == 123);
+    CHECK(test->get_results == 1);
+}
+
+static void retrieve_payload(struct payload_operation *test)
+{
+    SIZE_T used = 123;
+    CHECK(IXThreadingImpl_XAsyncGetResult(threads, &test->block, NULL,
+        sizeof(test->result), &test->result, &used) == E_INVALIDARG);
+    CHECK(IXThreadingImpl_XAsyncGetResult(threads, &test->block, test,
+        sizeof(test->result), NULL, &used) == E_INVALIDARG);
+    CHECK(IXThreadingImpl_XAsyncGetResult(threads, &test->block, test,
+        sizeof(test->result) - 1, &test->result, &used) == HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER));
+    CHECK(test->get_results == 0 && used == 123 && !test->result);
+    CHECK(IXThreadingImpl_XAsyncGetResult(threads, &test->block, test,
+        sizeof(test->result), &test->result, &used) == S_OK);
+    CHECK(used == sizeof(test->result) && test->result == &test->payload);
+    CHECK(test->get_results == 1 && !test->pending_result);
+    check_consumed_result(test);
+}
 
 static HRESULT WINAPI payload_provider(XAsyncOp op, const XAsyncProviderData *data)
 {
@@ -58,7 +86,13 @@ static HRESULT WINAPI payload_provider(XAsyncOp op, const XAsyncProviderData *da
     if (op == XAsyncOp_GetResult) {
         CHECK(data->buffer && data->bufferSize >= sizeof(test->result));
         if (!data->buffer || data->bufferSize < sizeof(test->result)) return E_INVALIDARG;
-        *(DWORD **)data->buffer = &test->payload;
+        ++test->get_results;
+        /* Model GameSave's destructive handle transfer. A second call would
+         * otherwise return success with the now-cleared provider handle. */
+        *(DWORD **)data->buffer = test->pending_result;
+        test->pending_result = NULL;
+        /* Also exercise a nested retrieval before the first provider returns. */
+        if (test->get_results == 1) check_consumed_result(test);
     }
     if (op == XAsyncOp_Cleanup) {
         ++test->cleanup;
@@ -71,9 +105,8 @@ static void WINAPI payload_completed(XAsyncBlock *block)
 {
     struct payload_operation *test = block->context;
     ++test->callbacks;
-    if (!test->early_result && !test->skip_result)
-        CHECK(IXThreadingImpl_XAsyncGetResult(threads, block, test,
-            sizeof(test->result), &test->result, NULL) == S_OK);
+    if (!test->early_result && !test->skip_result) retrieve_payload(test);
+    if (test->early_result) check_consumed_result(test);
     CHECK(test->cleanup == 0);
     CHECK(test->payload == 0x12345678);
     if (test->result) CHECK(*test->result == 0x12345678);
@@ -87,6 +120,7 @@ static void check_payload_lifetime(void)
     for (mode = 0; mode < 5; ++mode) {
         ZeroMemory(&test, sizeof(test));
         test.payload = 0x12345678;
+        test.pending_result = &test.payload;
         test.early_result = mode == 1;
         test.skip_result = mode == 3;
         CHECK(IXThreadingImpl_XTaskQueueCreate(threads, XTaskQueueDispatchMode_Manual,
@@ -99,17 +133,16 @@ static void check_payload_lifetime(void)
             "completion-lifetime", payload_provider) == S_OK);
         IXThreadingImpl_XAsyncComplete(threads, &test.block, S_OK, sizeof(test.result));
         if (test.early_result) {
-            CHECK(IXThreadingImpl_XAsyncGetResult(threads, &test.block, &test,
-                sizeof(test.result), &test.result, NULL) == S_OK);
+            retrieve_payload(&test);
             CHECK(test.cleanup == 0);
         }
         if (mode != 2 && mode != 4)
             CHECK(IXThreadingImpl_XTaskQueueDispatch(threads, payload_queue, XTaskQueuePort_Completion, 0));
         if (mode == 3 || mode == 4) {
             CHECK(test.cleanup == 0);
-            CHECK(IXThreadingImpl_XAsyncGetResult(threads, &test.block, &test,
-                sizeof(test.result), &test.result, NULL) == S_OK);
+            retrieve_payload(&test);
         }
+        check_consumed_result(&test);
         CHECK(test.cleanup == 1);
         CHECK(test.callbacks == (mode == 4 ? 0 : 1));
         IXThreadingImpl_XTaskQueueCloseHandle(threads, payload_queue);
@@ -151,8 +184,20 @@ int main(int argc, char **argv)
     }
     CHECK(callbacks == 400);
     CHECK(cleanups == 500);
-    IXThreadingImpl_XTaskQueueCloseHandle(threads, queue);
     check_payload_lifetime();
+    {
+        XAsyncBlock block = {0};
+        SIZE_T used;
+        block.queue = queue;
+        CHECK(IXThreadingImpl_XAsyncBegin(threads, &block, NULL, NULL, "no-payload", provider) == S_OK);
+        IXThreadingImpl_XAsyncComplete(threads, &block, S_OK, 0);
+        for (i = 0; i < 2; ++i) {
+            used = 123;
+            CHECK(IXThreadingImpl_XAsyncGetResult(threads, &block, NULL, 0, NULL, &used) == S_OK);
+            CHECK(used == 0);
+        }
+    }
+    IXThreadingImpl_XTaskQueueCloseHandle(threads, queue);
     IXThreadingImpl_Release(threads);
     printf("ASYNC CHECKS %ld FAILURES %ld CALLBACKS %ld CLEANUPS %ld\n", checks, failures, callbacks, cleanups);
     return failures ? 1 : 0;
