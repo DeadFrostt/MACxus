@@ -73,6 +73,15 @@ credentials, disable Keychain protection, or allow every application access.
 ### 4. Install a game
 
 Choose a game in **My Library** or **Store**, then choose the drive/folder for it.
+Use the **info** button beside a library card's install button to see Microsoft's
+download and installed-size estimates. With a controller, highlight the card and
+press **X (Options)** to open its size information. Game pages show sizes alongside
+last played/time played, including for installed games. Installed size is measured
+from the installed game's files when available; it is logical file bytes, not
+allocated disk space, and linked files are excluded. If measurement is unavailable,
+the page uses the Store estimate. Before downloading, review the selected
+package's estimates in the confirmation dialog. **Not reported** means no size
+is available; estimates can change with updates and selected content.
 APFS and Mac OS Extended drives work directly. For exFAT/FAT/NTFS drives, use
 **Create APFS image**. Wait for installation to finish, then press **Play**.
 Not every game works; kernel anti-cheat games are unsupported. See the README's
@@ -175,6 +184,11 @@ consentire l’accesso a tutte le applicazioni.
 ### 4. Installa un gioco
 
 Scegli un gioco da **La mia libreria** o **Negozio**, poi il disco e la cartella.
+Le schede della libreria e le pagine dei giochi mostrano la stima Microsoft del
+download, se disponibile. Prima di scaricare, controlla le stime del download e
+della dimensione installata nella conferma del pacchetto. **Non indicata** significa
+che lo Store non ha fornito quella dimensione; le stime possono cambiare con gli
+aggiornamenti e i contenuti selezionati.
 I dischi APFS e Mac OS esteso funzionano direttamente. Per exFAT/FAT/NTFS usa
 **Crea immagine APFS**. Attendi la fine dell'installazione e premi **Gioca**.
 Non tutti i giochi funzionano; gli anti-cheat a livello kernel non sono supportati.

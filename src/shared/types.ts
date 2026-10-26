@@ -293,6 +293,7 @@ export interface InstallChoice {
   packageFormat: string;
   kind: string;
   supported: boolean;
+  size?: PackageSize;
 }
 
 export interface InstallPlan {
@@ -319,6 +320,12 @@ export interface GameContentPlan {
   items: GameContentItem[];
 }
 
+/** Published Store maxima for one PC content package; not an exact disk-space requirement. */
+export interface PackageSize {
+  downloadBytes?: number;
+  installBytes?: number;
+}
+
 export interface CatalogProduct {
   productId: string;
   installProductId?: string;
@@ -336,6 +343,7 @@ export interface CatalogProduct {
   installability: 'supported' | 'unsupported' | 'unknown';
   packageFormat?: string;
   supportNote: string;
+  size?: PackageSize;
 }
 
 /** Public catalog data only, never an ownership/installation decision. */
@@ -350,6 +358,7 @@ export interface GameStoreDetails {
   releaseDate?: string;
   /** Decimal Xbox title ID from the catalog; lets activity and achievements load before installation. */
   titleId?: string;
+  size?: PackageSize;
 }
 
 export interface GameActivity {
@@ -449,6 +458,7 @@ export interface LauncherApi {
   removeGame(id: string, mode: 'library' | 'delete-files'): Promise<void>;
   getGameLaunchOptions(id: string): Promise<GameLaunchOptions>;
   getGameDetails(id: string): Promise<GameStoreDetails | undefined>;
+  getInstalledGameSize(id: string): Promise<number | undefined>;
   getGameActivity(id: string, refresh?: boolean): Promise<GameActivity>;
   getGameAchievements(id: string, refresh?: boolean): Promise<GameAchievements>;
   launchGame(id: string): Promise<void>;
