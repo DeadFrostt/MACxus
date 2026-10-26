@@ -24,6 +24,7 @@ import { prepareMacRunner } from './mac-engine.js';
 import { macRuntimeAvailable, runtimeDllDirectory, serviceSocketPathFits, syncMacDualSenseCompatibility } from './mac-launch.js';
 import { CatalogService } from './catalog.js';
 import { cloudSaveRuntime, selectedWinePath, startXodusService, storeContentRuntime, unbridgedCloudSaveRuntime, type XodusServiceSession } from './xodus-service.js';
+import { prepareMacLaunchOptions } from './mac-launch-options.js';
 import { GameLogReducer, gameLoggingEnvironment, gameWindowEnvironment } from './game-log.js';
 import { downloadVerifiedVcRedist, installedVcRuntimeVersion, VC_REDIST_VERSION, versionAtLeast } from './vc-runtime.js';
 import { assertGameRemovalAvailable, validateGameDeleteTarget } from './game-removal.js';
@@ -57,6 +58,7 @@ import { authViewFactory } from './auth-window.js';
 import { browserAuthViewFactory } from './auth-browser.js';
 import { fallbackAuthViewFactory } from './auth-fallback.js';
 import { installSelection, readInstallPlan } from './install-plan.js';
+import { findCrossOver, findCrossOverPreview, findCrossOverPreviewFex, type CrossOverInstall } from './crossover.js';
 import { adoptLauncherFonts } from './launcher-fonts.js';
 import { externalLauncherEnvironment } from './launcher-environment.js';
 import { openDesktopTarget } from './desktop-open.js';
@@ -233,8 +235,18 @@ function snapshot(): AppSnapshot {
 }
 
 let highballInstall: { installing: boolean; downloadedBytes?: number; totalBytes?: number; phase?: string; error?: string } = { installing: false };
+let detectedCrossOver: { standard?: CrossOverInstall; preview?: CrossOverInstall; fex?: CrossOverInstall } = {};
+async function refreshMacEngineDetection(): Promise<MacEngineStatus> {
+  if (process.platform !== 'darwin') throw Error('Wine engine detection is available on macOS only.');
+  const [standard, preview, fex] = await Promise.all([findCrossOver(), findCrossOverPreview(), findCrossOverPreviewFex()]);
+  detectedCrossOver = { standard, preview, fex };
+  return macEngineStatus();
+}
 function macEngineStatus(): MacEngineStatus {
-  return { ...highballInstall, highballInstalled: Boolean(highballEngineInstalled(path.dirname(store.settings.runtimeRoot))), highballTag: HIGHBALL_ENGINE_TAG };
+  return { ...highballInstall, highballInstalled: Boolean(highballEngineInstalled(path.dirname(store.settings.runtimeRoot))), highballTag: HIGHBALL_ENGINE_TAG,
+    crossoverInstalled: Boolean(detectedCrossOver.standard), crossoverVersion: detectedCrossOver.standard?.version,
+    crossoverPreviewInstalled: Boolean(detectedCrossOver.preview), crossoverPreviewVersion: detectedCrossOver.preview?.version,
+    crossoverPreviewFexSupported: Boolean(detectedCrossOver.fex), crossoverPreviewFexVersion: detectedCrossOver.fex?.version };
 }
 async function installHighball(): Promise<void> {
   if (process.platform !== 'darwin') throw Error('Il motore Highball è disponibile solo su macOS.');
@@ -1053,8 +1065,16 @@ async function prepareGameLaunch(id: string): Promise<void> {
       environment.MTL_HUD_ENABLED = '1';
       addGameLog('Metal performance HUD enabled for this game.');
     }
-    // Per-game macOS profile values (whitelisted) apply unless the user already set them.
-    for (const [key, value] of Object.entries(macProfileEnv)) if (environment[key] === undefined) environment[key] = value;
+    if (isMac && protonRunner) {
+      const macOptions = await prepareMacLaunchOptions(protonRunner.command, game.launchTools,
+        path.join(dataRoot, 'launch-wrappers'), environment, macProfileEnv, macEngine);
+      launchWrapper = macOptions;
+      args[2] = macOptions.command;
+      Object.assign(environment, macOptions.environment);
+      if (game.launchTools?.dlss) addGameLog(macEngine === 'highball'
+        ? 'DLSS launch tool applies to CrossOver; the current engine is Highball.'
+        : 'CrossOver DLSS support enabled for this game. Select DLSS in the game graphics settings when available.');
+    }
     if (isMac && protonRunner) await syncMacDualSenseCompatibility(wineCommand, gamePrefix, game.launchTools?.dualSenseCompatibility === true, environment, addGameLog);
     const contentRoots = await contentManager().roots(game).catch(error => {
       addGameLog(`Managed content discovery unavailable: ${(error as Error).message}`);
@@ -1363,6 +1383,7 @@ function registerDemoIpc(catalogMarket: () => string): void {
   ipcMain.handle('add-to-steam', () => { throw new Error('Steam integration is unavailable in demo mode.'); });
   ipcMain.handle('install-game-vc-runtime', () => {});
   ipcMain.handle('install-highball-engine', () => { throw new Error('Non disponibile in modalità demo.'); });
+  ipcMain.handle('mac-engines-refresh', () => snapshot().macEngine);
   ipcMain.handle('cancel-game', () => {});
   ipcMain.handle('update-settings', async (_event, patch: Partial<Settings>) => {
     if (patch.language !== undefined) await store.setSettings({ language: patch.language });
@@ -1734,7 +1755,7 @@ function registerIpc(): void {
     if (typeof patch.runtimeRoot === 'string') allowed.runtimeRoot = path.resolve(patch.runtimeRoot);
     if (typeof patch.verboseLogs === 'boolean') allowed.verboseLogs = patch.verboseLogs;
     if (typeof patch.firstRunCompleted === 'boolean') allowed.firstRunCompleted = patch.firstRunCompleted;
-    if (process.platform === 'darwin' && (patch.macEngine === 'crossover' || patch.macEngine === 'highball')) {
+    if (process.platform === 'darwin' && (patch.macEngine === 'crossover' || patch.macEngine === 'crossover-preview' || patch.macEngine === 'crossover-preview-fex' || patch.macEngine === 'highball')) {
       if (patch.macEngine !== store.settings.macEngine) ensureIdle();
       allowed.macEngine = patch.macEngine;
     }
@@ -1759,6 +1780,7 @@ function registerIpc(): void {
   });
   ipcMain.handle('list-volumes', () => process.platform === 'darwin' ? refreshVolumes() : []);
   ipcMain.handle('install-highball-engine', () => installHighball());
+  ipcMain.handle('mac-engines-refresh', async () => { const status = await refreshMacEngineDetection(); emitSnapshot(); return status; });
   ipcMain.handle('set-install-root', async (_event, root: string) => {
     if (process.platform !== 'darwin') throw Error('La scelta del disco è disponibile solo su macOS.');
     if (typeof root !== 'string' || !path.isAbsolute(root)) throw Error('Percorso non valido.');
@@ -2020,6 +2042,7 @@ app.whenReady().then(async () => {
   runtime = new RuntimeManager(store.settings.runtimeRoot, emitLog, () => downloadCancellations.size > 0 || operations.size > 0 || installQueue.size > 0 || preparingInstall || backend?.current.updating === true);
   backend = new BackendManager(app.getPath('userData'), store.settings.externalXodusRoot, emitLog, () => keyringSupport.busy || downloadCancellations.size > 0 || operations.size > 0 || installQueue.size > 0 || preparingInstall || runtime?.current.updating === true, fetch, process.platform, process.platform === 'darwin' && app.isPackaged ? { root: path.join(process.resourcesPath, 'backend'), arch: process.arch } : undefined);
   await backend.refresh();
+  if (process.platform === 'darwin') await refreshMacEngineDetection();
   if (process.platform === 'darwin') void backend.ensureSigned(() => emitSnapshot());
   await runtime.refresh();
   void backend.checkUpdate().then(async () => {
