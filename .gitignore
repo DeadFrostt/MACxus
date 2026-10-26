@@ -28,3 +28,6 @@ bundled/
 docs/internal/
 *.backup-*
 *.tmp*
+
+# Generated compatibility pack source archives (prepared during macOS packaging)
+/assets/compatibility-packs/*/source/

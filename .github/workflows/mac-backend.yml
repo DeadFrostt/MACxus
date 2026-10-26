@@ -1,10 +1,10 @@
 name: Native Mac backend
 on:
   pull_request:
-    paths: ['assets/**', 'src/main/**', 'src/shared/**', 'scripts/build-mac-backend.mjs', 'scripts/mac-backend-signing.mjs', 'scripts/verify-mac-bundle.mjs', 'scripts/launcher-fonts-after-pack.cjs', 'scripts/mac-runtime-dlls.mjs', 'scripts/prepare-mac-runtime-dlls.mjs', 'package*.json', 'tsconfig*.json', '.github/workflows/mac-backend.yml', 'scripts/mac-test-volume.mjs']
+    paths: ['assets/**', 'src/main/**', 'src/shared/**', 'scripts/build-mac-backend.mjs', 'scripts/mac-backend-signing.mjs', 'scripts/verify-mac-bundle.mjs', 'scripts/launcher-fonts-after-pack.cjs', 'scripts/mac-runtime-dlls.mjs', 'scripts/prepare-mac-runtime-dlls.mjs', 'package*.json', 'tsconfig*.json', '.github/workflows/mac-backend.yml', 'scripts/mac-test-volume.mjs', 'scripts/prepare-halo-media-pack.mjs', 'scripts/halo-media-pack.mjs', 'scripts/prepare-compatibility-packs.mjs', 'scripts/compatibility-packs.mjs']
   push:
     branches: [main, 'feat/**', 'fix/**']
-    paths: ['assets/**', 'src/main/**', 'src/shared/**', 'scripts/build-mac-backend.mjs', 'scripts/mac-backend-signing.mjs', 'scripts/verify-mac-bundle.mjs', 'scripts/launcher-fonts-after-pack.cjs', 'scripts/mac-runtime-dlls.mjs', 'scripts/prepare-mac-runtime-dlls.mjs', 'package*.json', 'tsconfig*.json', '.github/workflows/mac-backend.yml', 'scripts/mac-test-volume.mjs']
+    paths: ['assets/**', 'src/main/**', 'src/shared/**', 'scripts/build-mac-backend.mjs', 'scripts/mac-backend-signing.mjs', 'scripts/verify-mac-bundle.mjs', 'scripts/launcher-fonts-after-pack.cjs', 'scripts/mac-runtime-dlls.mjs', 'scripts/prepare-mac-runtime-dlls.mjs', 'package*.json', 'tsconfig*.json', '.github/workflows/mac-backend.yml', 'scripts/mac-test-volume.mjs', 'scripts/prepare-halo-media-pack.mjs', 'scripts/halo-media-pack.mjs', 'scripts/prepare-compatibility-packs.mjs', 'scripts/compatibility-packs.mjs']
   workflow_dispatch:
 permissions:
   contents: read
@@ -25,13 +25,16 @@ jobs:
           test "$(uname -m)" = arm64
           brew install protobuf gnu-tar
           rustup toolchain install "$(node -p "require('./assets/backend-source.lock.json').rust")" --profile minimal
+      - name: Install media-pack compiler tools for manual candidates
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        run: brew install bison mingw-w64
       - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             work/mac-backend-target
-          key: mac-backend-${{ runner.arch }}-${{ hashFiles('assets/backend-source.lock.json', 'scripts/build-mac-backend.mjs', 'scripts/mac-backend-signing.mjs', 'scripts/mac-test-volume.mjs') }}
+          key: mac-backend-${{ runner.arch }}-${{ hashFiles('assets/backend-source.lock.json', 'scripts/build-mac-backend.mjs', 'scripts/mac-backend-signing.mjs') }}
       - run: npm ci
       - name: Check native backend without creating a distribution candidate
         if: github.event_name != 'workflow_dispatch'
