@@ -1,0 +1,49 @@
+--- a/dlls/xgameruntime/xthreading.c
++++ b/dlls/xgameruntime/xthreading.c
+@@ -292,7 +292,11 @@
+     BOOL cleanup = FALSE;
+     EnterCriticalSection( &state->cs );
+     state->cleanup_requested = TRUE;
+-    if (!state->active_provider && !state->cleaned)
++    /* Native XAsync retains provider state for the queued completion callback.
++     * GetResult may consume the result during (or before) that callback, but
++     * its provider-owned data must remain alive until the callback returns. */
++    if (!state->active_provider && !state->cleaned &&
++        (!state->callback || state->completion_finished))
+     {
+         state->cleaned = 1;
+         cleanup = TRUE;
+@@ -322,7 +326,8 @@
+     LeaveCriticalSection( &state->cs );
+     hr = state->provider( op, &state->data );
+     EnterCriticalSection( &state->cs );
+-    if (!--state->active_provider && state->cleanup_requested && !state->cleaned)
++    if (!--state->active_provider && state->cleanup_requested && !state->cleaned &&
++        (!state->callback || state->completion_finished))
+     {
+         state->cleaned = 1;
+         cleanup = TRUE;
+@@ -524,6 +529,7 @@
+ 
+ static void CALLBACK async_completion_callback( struct async_state *state, BOOLEAN canceled )
+ {
++    BOOL cleanup;
+     if (canceled) async_invoke_provider( state, XAsyncOp_Cancel );
+     EnterCriticalSection( &state->cs );
+     state->completion_thread = GetCurrentThreadId();
+@@ -532,13 +538,14 @@
+     EnterCriticalSection( &state->cs );
+     state->completion_thread = 0;
+     state->completion_finished = TRUE;
++    cleanup = state->cleanup_requested || canceled || FAILED(state->status) || !state->data.bufferSize;
+     LeaveCriticalSection( &state->cs );
+     SetEvent( state->provider_block.internal[3] );
+     /* The application may delete or reuse XAsyncBlock inside its completion
+      * callback. Only the runtime-owned state may be touched after it returns.
+      * GetResult may already have cleaned the provider; cleaned makes this
+      * idempotent without dereferencing the caller's freed block. */
+-    if (canceled || FAILED(state->status) || !state->data.bufferSize)
++    if (cleanup)
+         async_cleanup_state( state, state->provider );
+     async_release_queue( state );
+ }

@@ -42,6 +42,80 @@ static void WINAPI completed(XAsyncBlock *block)
     }
 }
 
+/* Provider-owned payloads must survive result consumption until completion
+ * returns, including when GetResult runs before a manually queued callback. */
+struct payload_operation
+{
+    XAsyncBlock block;
+    DWORD payload, *result;
+    unsigned cleanup, callbacks;
+    BOOL early_result, skip_result;
+};
+
+static HRESULT WINAPI payload_provider(XAsyncOp op, const XAsyncProviderData *data)
+{
+    struct payload_operation *test = data->context;
+    if (op == XAsyncOp_GetResult) {
+        CHECK(data->buffer && data->bufferSize >= sizeof(test->result));
+        if (!data->buffer || data->bufferSize < sizeof(test->result)) return E_INVALIDARG;
+        *(DWORD **)data->buffer = &test->payload;
+    }
+    if (op == XAsyncOp_Cleanup) {
+        ++test->cleanup;
+        test->payload = 0;
+    }
+    return S_OK;
+}
+
+static void WINAPI payload_completed(XAsyncBlock *block)
+{
+    struct payload_operation *test = block->context;
+    ++test->callbacks;
+    if (!test->early_result && !test->skip_result)
+        CHECK(IXThreadingImpl_XAsyncGetResult(threads, block, test,
+            sizeof(test->result), &test->result, NULL) == S_OK);
+    CHECK(test->cleanup == 0);
+    CHECK(test->payload == 0x12345678);
+    if (test->result) CHECK(*test->result == 0x12345678);
+}
+
+static void check_payload_lifetime(void)
+{
+    XTaskQueueHandle payload_queue;
+    struct payload_operation test;
+    unsigned mode;
+    for (mode = 0; mode < 5; ++mode) {
+        ZeroMemory(&test, sizeof(test));
+        test.payload = 0x12345678;
+        test.early_result = mode == 1;
+        test.skip_result = mode == 3;
+        CHECK(IXThreadingImpl_XTaskQueueCreate(threads, XTaskQueueDispatchMode_Manual,
+            mode == 2 ? XTaskQueueDispatchMode_Immediate : XTaskQueueDispatchMode_Manual,
+            &payload_queue) == S_OK);
+        test.block.queue = payload_queue;
+        test.block.context = &test;
+        test.block.callback = mode == 4 ? NULL : payload_completed;
+        CHECK(IXThreadingImpl_XAsyncBegin(threads, &test.block, &test, &test,
+            "completion-lifetime", payload_provider) == S_OK);
+        IXThreadingImpl_XAsyncComplete(threads, &test.block, S_OK, sizeof(test.result));
+        if (test.early_result) {
+            CHECK(IXThreadingImpl_XAsyncGetResult(threads, &test.block, &test,
+                sizeof(test.result), &test.result, NULL) == S_OK);
+            CHECK(test.cleanup == 0);
+        }
+        if (mode != 2 && mode != 4)
+            CHECK(IXThreadingImpl_XTaskQueueDispatch(threads, payload_queue, XTaskQueuePort_Completion, 0));
+        if (mode == 3 || mode == 4) {
+            CHECK(test.cleanup == 0);
+            CHECK(IXThreadingImpl_XAsyncGetResult(threads, &test.block, &test,
+                sizeof(test.result), &test.result, NULL) == S_OK);
+        }
+        CHECK(test.cleanup == 1);
+        CHECK(test.callbacks == (mode == 4 ? 0 : 1));
+        IXThreadingImpl_XTaskQueueCloseHandle(threads, payload_queue);
+    }
+}
+
 int main(int argc, char **argv)
 {
     HRESULT (WINAPI *query)(const GUID *, REFIID, void **);
@@ -78,6 +152,7 @@ int main(int argc, char **argv)
     CHECK(callbacks == 400);
     CHECK(cleanups == 500);
     IXThreadingImpl_XTaskQueueCloseHandle(threads, queue);
+    check_payload_lifetime();
     IXThreadingImpl_Release(threads);
     printf("ASYNC CHECKS %ld FAILURES %ld CALLBACKS %ld CLEANUPS %ld\n", checks, failures, callbacks, cleanups);
     return failures ? 1 : 0;
