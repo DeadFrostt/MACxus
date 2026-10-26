@@ -18,6 +18,7 @@ Risultati di prove reali. Un gioco che funziona su un Mac può comportarsi diver
 | Mad King Redemption | ✅ | Highball | M1 Max · 0.3.11-mac.2 | |
 | MARVEL Cosmic Invasion | ✅ | Highball | M1 Max · 0.3.11-mac.2 | |
 | Minecraft Dungeons II | ✅ | Highball | M1 Max · 0.3.11-mac.1 | Needs Highball. |
+| Nine Sols | ✅ | CrossOver | M4 Pro · 0.3.11-mac.5 | Community report ([#9](https://github.com/fladnaG86/MACxus/issues/9)). Tested with an Xbox controller. |
 | Super Meat Boy 3D | ✅ | Highball | M1 Max · 0.3.11-mac.3 | |
 | TUNIC | ✅ | CrossOver | M1 Max · 0.3.11-mac.1 | Tested with keyboard. |
 | Vampire Survivors | ✅ | Highball | M1 Max · 0.3.11-mac.4 | |
@@ -44,6 +45,7 @@ Risultati di prove reali. Un gioco che funziona su un Mac può comportarsi diver
 | Mad King Redemption | ✅ | Highball | M1 Max · 0.3.11-mac.2 | |
 | MARVEL Cosmic Invasion | ✅ | Highball | M1 Max · 0.3.11-mac.2 | |
 | Minecraft Dungeons II | ✅ | Highball | M1 Max · 0.3.11-mac.1 | Richiede Highball. |
+| Nine Sols | ✅ | CrossOver | M4 Pro · 0.3.11-mac.5 | Resoconto della community ([#9](https://github.com/fladnaG86/MACxus/issues/9)). Provato con un controller Xbox. |
 | Super Meat Boy 3D | ✅ | Highball | M1 Max · 0.3.11-mac.3 | |
 | TUNIC | ✅ | CrossOver | M1 Max · 0.3.11-mac.1 | Provato con la tastiera. |
 | Vampire Survivors | ✅ | Highball | M1 Max · 0.3.11-mac.4 | |
