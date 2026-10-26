@@ -160,3 +160,26 @@ it('offers DualSense compatibility per game, off by default and with feature lim
   expect(on).toContain('Does not change Xbox controller settings');
   expect(on).toContain('adaptive triggers may be unavailable');
 });
+
+it('offers DLSS only on macOS with its requirements and per-game state', () => {
+  const render = (mac: boolean, dlss = false) => renderToStaticMarkup(<GameLaunchToolFields value={{ ...defaultLaunchTools, dlss }} change={() => {}} mac={mac} />);
+  expect(render(false)).not.toContain('Enable DLSS');
+  const off = render(true), on = render(true, true);
+  expect(off).toContain('Enable DLSS (CrossOver)');
+  expect(off).not.toContain('checked');
+  expect(on).toContain('checked');
+  expect(on).toContain('macOS Tahoe or newer for D3DMetal, Sonoma or newer for DXMT');
+  expect(on).toContain('Also select DLSS in the game&#x27;s graphics settings');
+  expect(on).toContain('Does not affect other engines');
+});
+
+
+it('explains the macOS launch-options contract without advertising custom wrappers', () => {
+  const mac = renderToStaticMarkup(<GameLaunchToolFields value={defaultLaunchTools} change={() => {}} mac />);
+  expect(mac).toContain('CX_GRAPHICS_BACKEND=dxmt %command% --launcher-skip');
+  expect(mac).toContain('shell expansion and custom wrappers are unsupported');
+  expect(mac).toContain('graphics support depends on the selected engine');
+  expect(mac).not.toContain('NAME=value and wrappers before');
+  const linux = renderToStaticMarkup(<GameLaunchToolFields value={defaultLaunchTools} change={() => {}} />);
+  expect(linux).toContain('NAME=value and wrappers before');
+});

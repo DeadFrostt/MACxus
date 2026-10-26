@@ -43,6 +43,13 @@ In **Settings**, choose **Install Nexus runtime** if no runtime is selected.
 MACxus verifies and installs it. Optionally install the **Highball** Wine engine
 for supported D3D12/Unreal games; CrossOver remains the default.
 
+**Wine engine** also detects CrossOver Preview in Applications. Choose **Preview
+(Rosetta)** for the regular build or **Preview (FEX/ARM)** for the ARM64 build.
+Each Preview mode uses a separate bottle. The FEX option appears when its ARM64
+engine is present; game compatibility can differ from Rosetta. Use **Refresh
+engine detection** after installing or updating a Preview build. Highball still
+requires regular CrossOver for its graphics libraries.
+
 Choose **Sign in with Xodus**. Sign-in uses MACxus's own window: Chrome is not
 needed. Use your Microsoft password, a code or the Authenticator app. Passkeys
 are not supported on macOS yet; choose **Other ways to sign in** if Microsoft asks
@@ -70,6 +77,22 @@ APFS and Mac OS Extended drives work directly. For exFAT/FAT/NTFS drives, use
 **Create APFS image**. Wait for installation to finish, then press **Play**.
 Not every game works; kernel anti-cheat games are unsupported. See the README's
 compatibility notes.
+
+### Per-game launch options
+
+In a game's **Launch tools → Launch options**, put environment assignments before
+`%command%` and extra game arguments after it, for example:
+`CX_GRAPHICS_BACKEND=dxmt %command% --launcher-skip "two words"`.
+Assignments alone also work. Quotes group literal values; variables, wildcards and
+shell commands are not expanded. Custom executable wrappers are unsupported on
+macOS and stop the launch with an error. Managed prefix and service variables
+cannot be overridden.
+
+Options apply to this launch only, without changing the shared bottle or another
+game's settings. Per-game assignments override profile defaults and inherited
+values; the **DLSS** toggle still controls its own flags, including in `CX_ENV`.
+Graphics requests only work when the selected engine supports them; requesting
+DXMT does not add missing FEX backend support.
 
 ### Updates and help
 
@@ -121,6 +144,13 @@ In **Impostazioni**, scegli **Installa runtime Nexus** se non è selezionato alc
 runtime. MACxus lo verifica e lo installa. Puoi anche installare il motore Wine
 **Highball** per i giochi D3D12/Unreal supportati; CrossOver resta il predefinito.
 
+**Motore Wine** rileva anche CrossOver Preview in Applicazioni. Scegli **Preview
+(Rosetta)** per la build normale o **Preview (FEX/ARM)** per quella ARM64. Ogni
+modalità Preview usa una bottle separata. L'opzione FEX è disponibile quando è
+presente il motore ARM64; la compatibilità può differire da Rosetta. Usa
+**Aggiorna rilevamento motori** dopo aver installato o aggiornato Preview.
+Highball richiede ancora CrossOver normale per le librerie grafiche.
+
 Scegli **Accedi con Xodus**. L'accesso avviene nella finestra di MACxus: Chrome non
 serve. Usa la password Microsoft, un codice o l'app Authenticator. Le passkey non
 sono ancora supportate su macOS: scegli **Altri modi per accedere** se Microsoft
@@ -149,6 +179,22 @@ I dischi APFS e Mac OS esteso funzionano direttamente. Per exFAT/FAT/NTFS usa
 **Crea immagine APFS**. Attendi la fine dell'installazione e premi **Gioca**.
 Non tutti i giochi funzionano; gli anti-cheat a livello kernel non sono supportati.
 Consulta le note di compatibilità nel README.
+
+### Opzioni di avvio per gioco
+
+In **Strumenti di avvio → Opzioni di avvio** del gioco, inserisci le variabili prima
+di `%command%` e gli argomenti aggiuntivi dopo, per esempio:
+`CX_GRAPHICS_BACKEND=dxmt %command% --launcher-skip "due parole"`.
+Puoi anche usare solo assegnazioni di variabili. Le virgolette raggruppano valori
+letterali: variabili, caratteri jolly e comandi shell non vengono espansi. I wrapper
+eseguibili personalizzati non sono supportati su macOS e bloccano l'avvio con un
+errore. Le variabili gestite del prefisso e del servizio non sono modificabili.
+
+Le opzioni valgono solo per questo avvio, senza modificare la bottle condivisa o
+le impostazioni degli altri giochi. Le assegnazioni del gioco prevalgono sui
+profili e sui valori ereditati; l'opzione **DLSS** controlla comunque i propri flag,
+anche in `CX_ENV`. Le richieste grafiche funzionano solo se il motore scelto le
+supporta: richiedere DXMT non aggiunge il supporto backend mancante a FEX.
 
 ### Aggiornamenti e aiuto
 
