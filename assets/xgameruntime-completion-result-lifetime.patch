@@ -21,7 +21,18 @@
      {
          state->cleaned = 1;
          cleanup = TRUE;
-@@ -322,7 +327,8 @@
+@@ -313,7 +318,9 @@
+     HRESULT hr;
+     BOOL cleanup = FALSE;
+     EnterCriticalSection( &state->cs );
+-    if (state->cleaned)
++    /* Consuming the result detaches the operation from later provider calls,
++     * even while Cleanup retains its captured data for completion. */
++    if (state->cleaned || (state->result_consumed && op != XAsyncOp_GetResult))
+     {
+         LeaveCriticalSection( &state->cs );
+         return E_ABORT;
+@@ -322,7 +329,8 @@
      LeaveCriticalSection( &state->cs );
      hr = state->provider( op, &state->data );
      EnterCriticalSection( &state->cs );
@@ -31,7 +42,7 @@
      {
          state->cleaned = 1;
          cleanup = TRUE;
-@@ -524,6 +530,7 @@
+@@ -524,6 +532,7 @@
  
  static void CALLBACK async_completion_callback( struct async_state *state, BOOLEAN canceled )
  {
@@ -39,7 +50,7 @@
      if (canceled) async_invoke_provider( state, XAsyncOp_Cancel );
      EnterCriticalSection( &state->cs );
      state->completion_thread = GetCurrentThreadId();
-@@ -532,13 +539,14 @@
+@@ -532,13 +541,14 @@
      EnterCriticalSection( &state->cs );
      state->completion_thread = 0;
      state->completion_finished = TRUE;
@@ -55,7 +66,7 @@
          async_cleanup_state( state, state->provider );
      async_release_queue( state );
  }
-@@ -577,20 +585,43 @@
+@@ -577,20 +587,43 @@
      TRACE( "iface %p asyncBlock %p, identity %p, bufferSize %Iu, buffer %p, bufferUsed %p.\n", iface, asyncBlock, identity, bufferSize, buffer, bufferUsed );
      if (FAILED(hr = x_threading_XAsyncGetStatus( iface, asyncBlock, FALSE ))) return hr;
      state = async_state( asyncBlock );
