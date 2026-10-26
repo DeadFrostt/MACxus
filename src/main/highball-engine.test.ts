@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { MAC_RUNTIME_DLLS } from './crossover.js';
 import {
   HIGHBALL_ENGINE_ASSET, HIGHBALL_ENGINE_RELEASE, HIGHBALL_ENGINE_SHA256_ASSET, HIGHBALL_ENGINE_SIZE, HIGHBALL_ENGINE_TAG,
-  HIGHBALL_FRAMEWORKS, highballEngineInstalled, installHighballEngineOverrides, highballWrapperScript, installHighballEngine, prepareHighballRunner, type HighballRelease,
+  HIGHBALL_FRAMEWORKS, highballEngineInstalled, installHighballEngineOverrides, highballWrapperScript, installHighballEngine, patchPeExportName, prepareD3D12Shim, prepareHighballRunner, type HighballRelease,
 } from './highball-engine.js';
 
 const temporary: string[] = [];
@@ -458,5 +458,100 @@ describe('installHighballEngineOverrides', () => {
     await expect(stat(path.join(lib, 'notawinedll.dll'))).rejects.toThrow();
     expect(logs.join('\n')).toContain('notawinedll.dll');
     expect(await installHighballEngineOverrides(engine, prefix, path.join(overrides, 'missing'))).toEqual([]);
+  });
+});
+
+/** A minimal PE32+ with one section holding an export directory named `name`. */
+function fakePe(name: string): Buffer {
+  const b = Buffer.alloc(0x400);
+  b.write('MZ', 0);
+  b.writeUInt32LE(0x40, 0x3c);
+  b.write('PE\0\0', 0x40, 'latin1');
+  b.writeUInt16LE(0x8664, 0x44);
+  b.writeUInt16LE(1, 0x46);
+  b.writeUInt16LE(0xf0, 0x54);
+  const opt = 0x58;
+  b.writeUInt16LE(0x20b, opt);
+  b.writeUInt32LE(0x1000, opt + 112);
+  b.writeUInt32LE(0x60, opt + 116);
+  const section = opt + 0xf0;
+  b.write('.edata', section, 'latin1');
+  b.writeUInt32LE(0x100, section + 8);
+  b.writeUInt32LE(0x1000, section + 12);
+  b.writeUInt32LE(0x200, section + 16);
+  b.writeUInt32LE(0x200, section + 20);
+  b.writeUInt32LE(0x1040, 0x200 + 12);
+  b.write(`${name}\0`, 0x240, 'latin1');
+  return b;
+}
+
+describe('patchPeExportName', () => {
+  it('renames the export directory name in place', () => {
+    const patched = patchPeExportName(fakePe('d3d12.dll'), 'apd12.dll');
+    expect(patched.toString('latin1', 0x240, 0x24a)).toBe('apd12.dll\0');
+    expect(patched.length).toBe(0x400);
+  });
+
+  it('refuses a name of another length', () => {
+    expect(() => patchPeExportName(fakePe('d3d12.dll'), 'longer_name.dll')).toThrow();
+  });
+
+  it('accepts real D3DMetal d3d12.dll when CrossOver is installed', async () => {
+    const gptk = '/Applications/CrossOver.app/Contents/SharedSupport/CrossOver/lib64/apple_gptk';
+    let real: Buffer;
+    try { real = await readFile(path.join(gptk, 'wine', 'x86_64-windows', 'd3d12.dll')); } catch { return; }
+    const patched = patchPeExportName(real, 'apd12.dll');
+    expect(patched.length).toBe(real.length);
+    expect(patched.equals(real)).toBe(false);
+  });
+});
+
+describe('prepareD3D12Shim', () => {
+  async function layout(): Promise<{ shim: string; gptk: string }> {
+    const root = await tmp();
+    const shim = path.join(root, 'shim');
+    const gptk = path.join(root, 'gptk');
+    await mkdir(path.join(shim, 'wine', 'x86_64-windows'), { recursive: true });
+    await mkdir(path.join(gptk, 'wine', 'x86_64-windows'), { recursive: true });
+    await mkdir(path.join(gptk, 'wine', 'x86_64-unix'), { recursive: true });
+    await writeFile(path.join(shim, 'wine', 'x86_64-windows', 'd3d12.dll'), 'shim');
+    await writeFile(path.join(gptk, 'wine', 'x86_64-windows', 'd3d12.dll'), fakePe('d3d12.dll'));
+    await writeFile(path.join(gptk, 'wine', 'x86_64-unix', 'd3d12.so'), 'unix');
+    return { shim, gptk };
+  }
+
+  it('is undefined when no shim is installed', async () => {
+    const root = await tmp();
+    expect(await prepareD3D12Shim(path.join(root, 'none'), path.join(root, 'gptk'))).toBeUndefined();
+  });
+
+  it('lays out D3DMetal d3d12 as apd12 beside the shim and links its unix half', async () => {
+    const { shim, gptk } = await layout();
+    const result = await prepareD3D12Shim(shim, gptk);
+    const real = path.join(shim, 'wine', 'x86_64-windows', 'apd12.dll');
+    expect(result).toEqual({ dir: shim, realDll: real });
+    expect((await readFile(real)).toString('latin1', 0x240, 0x24a)).toBe('apd12.dll\0');
+    expect(await (await import('node:fs/promises')).readlink(path.join(shim, 'wine', 'x86_64-unix', 'apd12.so')))
+      .toBe(path.join(gptk, 'wine', 'x86_64-unix', 'd3d12.so'));
+  });
+
+  it('is idempotent', async () => {
+    const { shim, gptk } = await layout();
+    const first = await prepareD3D12Shim(shim, gptk);
+    expect(await prepareD3D12Shim(shim, gptk)).toEqual(first);
+  });
+});
+
+describe('highballWrapperScript shim wiring', () => {
+  it('prepends the shim directory and points HB_D3D12_REAL at apd12', () => {
+    const script = highballWrapperScript('/e', '/gptk', '/lib64', '/p', {}, { dir: '/Data/shim dir', realDll: '/Data/shim dir/wine/x86_64-windows/apd12.dll' });
+    expect(script).toContain("export WINEDLLPATH_PREPEND='/Data/shim dir/wine:/gptk/wine'");
+    expect(script).toContain("export HB_D3D12_REAL='Z:\\Data\\shim dir\\wine\\x86_64-windows\\apd12.dll'");
+  });
+
+  it('leaves the wrapper unchanged without a shim', () => {
+    const script = highballWrapperScript('/e', '/gptk', '/lib64', '/p', {});
+    expect(script).toContain("export WINEDLLPATH_PREPEND='/gptk/wine'");
+    expect(script).not.toContain('HB_D3D12_REAL');
   });
 });
