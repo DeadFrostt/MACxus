@@ -52,8 +52,9 @@ for one. You need to own the game or have an appropriate PC Game Pass subscripti
 
 Choose a game in **My Library** or **Store**, then choose the drive/folder for it.
 Use the **info** button beside a library card's install button to see Microsoft's
-download and installed-size estimates. Game pages show these alongside last
-played/time played, including for installed games. Installed size is measured
+download and installed-size estimates. With a controller, highlight the card and
+press **X (Options)** to open its size information. Game pages show sizes alongside
+last played/time played, including for installed games. Installed size is measured
 from the installed game's files when available; it is logical file bytes, not
 allocated disk space, and linked files are excluded. If measurement is unavailable,
 the page uses the Store estimate. Before downloading, review the selected
