@@ -271,6 +271,22 @@ export function highballWrapperScript(engineRoot: string, appleGptkRoot: string,
     'if [ "${1:-}" = "--nexus-stop-prefix" ]; then',
     `  exec ${wineserver} -k`,
     'fi',
+    // Like Nexus' Linux wine-launcher: the title's PlayFabGameSave.dll becomes nexus_pgs_native.dll
+    // behind the runtime's proxy, which adds the stock UI in-process PlayFab saves expect. Only a
+    // symlink in the RAM-disk launch view is swapped, and it is put back before the backend copies
+    // the game's new files into its folder. NEXUS_PLAYFAB_ADAPTER=0 turns it off.
+    'pgs_restore() { rm -f "$pgs_dll" "$pgs_dir/nexus_pgs_native.dll"; ln -s "$pgs_target" "$pgs_dll"; }',
+    'case "${1:-}" in Z:\\\\*) pgs_dir=$(printf \'%s\' "${1#Z:}" | tr \'\\\\\' /); pgs_dir=${pgs_dir%/*} ;; *) pgs_dir= ;; esac',
+    'pgs_dll="$pgs_dir/PlayFabGameSave.dll"',
+    'if [ -n "$pgs_dir" ] && [ "${NEXUS_PLAYFAB_ADAPTER:-1}" != 0 ] && [ -f "${NEXUS_PGS_PROXY:-}" ] && [ -L "$pgs_dll" ] && [ ! -e "$pgs_dir/nexus_pgs_native.dll" ]; then',
+    '  pgs_target=$(readlink "$pgs_dll")',
+    '  if cp "$pgs_dll" "$pgs_dir/nexus_pgs_native.dll" && rm "$pgs_dll" && cp "$NEXUS_PGS_PROXY" "$pgs_dll"; then',
+    '    trap pgs_restore EXIT; trap \'exit 129\' HUP; trap \'exit 130\' INT; trap \'exit 143\' TERM',
+    '    export WINEDLLOVERRIDES="${WINEDLLOVERRIDES:+$WINEDLLOVERRIDES;}playfabgamesave=n;nexus_pgs_native=n"',
+    '  else',
+    '    pgs_restore',
+    '  fi',
+    'fi',
     'launch_status=0',
     `${wine} "$@" || launch_status=$?`,
     'wait_status=0',

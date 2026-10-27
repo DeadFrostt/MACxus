@@ -287,6 +287,30 @@ describe('highballWrapperScript', () => {
     expect(script.indexOf('--nexus-stop-prefix')).toBeGreaterThan(script.indexOf('WINEPREFIX'));
   });
 
+  it('swaps the PlayFab save SDK for the runtime proxy only inside the launch view and puts it back', async () => {
+    const { execFileSync } = await import('node:child_process');
+    const { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, readFileSync, readlinkSync, lstatSync, existsSync, chmodSync } = await import('node:fs');
+    const os = await import('node:os');
+    const root = mkdtempSync(path.join(os.tmpdir(), 'pgs-'));
+    const game = path.join(root, 'game'), view = path.join(root, 'view'), bin = path.join(root, 'engine', 'engine', 'bin');
+    mkdirSync(game); mkdirSync(view); mkdirSync(bin, { recursive: true });
+    writeFileSync(path.join(game, 'PlayFabGameSave.dll'), 'sdk');
+    symlinkSync(path.join(game, 'PlayFabGameSave.dll'), path.join(view, 'PlayFabGameSave.dll'));
+    writeFileSync(path.join(root, 'proxy.dll'), 'proxy');
+    // The fake wine records what the game would see while it runs.
+    writeFileSync(path.join(bin, 'wine'), `#!/bin/sh\ncat "${view}/PlayFabGameSave.dll" "${view}/nexus_pgs_native.dll" > "${root}/seen"\necho "$WINEDLLOVERRIDES" >> "${root}/seen"\n`);
+    writeFileSync(path.join(bin, 'wineserver'), '#!/bin/sh\nexit 0\n');
+    chmodSync(path.join(bin, 'wine'), 0o755); chmodSync(path.join(bin, 'wineserver'), 0o755);
+    const runner = path.join(root, 'runner');
+    writeFileSync(runner, highballWrapperScript(path.join(root, 'engine'), '/g', '/l', path.join(root, 'prefix'), {}));
+    execFileSync('/bin/sh', [runner, `Z:${view.replaceAll('/', '\\')}\\game.exe`], { env: { PATH: '/usr/bin:/bin', NEXUS_PGS_PROXY: path.join(root, 'proxy.dll') } });
+    expect(readFileSync(path.join(root, 'seen'), 'utf8')).toBe('proxysdkplayfabgamesave=n;nexus_pgs_native=n\n');
+    expect(lstatSync(path.join(view, 'PlayFabGameSave.dll')).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(path.join(view, 'PlayFabGameSave.dll'))).toBe(path.join(game, 'PlayFabGameSave.dll'));
+    expect(existsSync(path.join(view, 'nexus_pgs_native.dll'))).toBe(false);
+    expect(readFileSync(path.join(game, 'PlayFabGameSave.dll'), 'utf8')).toBe('sdk');
+  });
+
   it('ignores env keys that are not valid shell names and values outside the safe set', () => {
     const unsafe = highballWrapperScript('/e', '/g', '/l', '/p', { 'A;rm -rf /': 'x', SAFE_KEY: '$(touch /tmp/x)', QUOTE: 'a"b' });
     expect(unsafe).not.toContain('rm -rf');

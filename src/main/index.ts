@@ -1,5 +1,5 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, Notification, powerSaveBlocker, screen, shell } from 'electron';
-import { constants, createWriteStream, promises as fs, readFileSync, watch, writeFileSync } from 'node:fs';
+import { constants, createWriteStream, existsSync, promises as fs, readFileSync, watch, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -1106,6 +1106,9 @@ async function prepareGameLaunch(id: string): Promise<void> {
       environment.XODUS_BRIDGE_KEY = serviceSession.bridgeKey;
       environment.XODUS_SAVE_SYNC = 'auto';
       addGameLog('Xbox cloud save preview is enabled. Saves may download from and upload to the account cloud.');
+      // The Highball wrapper stages it in the launch view, as the runtime's wine-launcher does on Linux.
+      const playFabProxy = path.join(path.dirname(wine), '..', 'share', 'xodus-nexus', 'compat', 'PlayFabGameSave.dll');
+      if (isMac && existsSync(playFabProxy)) environment.NEXUS_PGS_PROXY = playFabProxy;
     }
     if (isMac && protonRunner) addGameLog(`${macEngine === 'highball' ? 'Prefisso Highball' : 'CrossOver bottle'}: ${protonRunner.compatibilityDataPath}`);
     else if (protonRunner) addGameLog(`Proton prefix: ${protonRunner.compatibilityDataPath}/pfx`);
