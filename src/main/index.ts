@@ -27,7 +27,8 @@ import { cloudSaveRuntime, selectedWinePath, startXodusService, storeContentRunt
 import { prepareMacLaunchOptions } from './mac-launch-options.js';
 import { GameLogReducer, gameLoggingEnvironment, gameWindowEnvironment } from './game-log.js';
 import { installedGameBytes } from './installed-size.js';
-import { downloadVerifiedVcRedist, installedVcRuntimeVersion, VC_REDIST_VERSION, versionAtLeast } from './vc-runtime.js';
+import { downloadVerifiedVcRedist, installedVcRuntimeVersion, VC_REDIST_VERSION, versionAtLeast, vcInstallAvailability } from './vc-runtime.js';
+import { resolvePackageFile } from './windows-path.js';
 import { assertGameRemovalAvailable, validateGameDeleteTarget } from './game-removal.js';
 import { deleteGameDirectory } from './game-delete.js';
 import { spawnGameProcess, waitForGameExit, type GameProcess } from './game-process.js';
@@ -923,8 +924,7 @@ async function gameLaunchOptions(id: string): Promise<GameLaunchOptions> {
   return {
     cloudSaves: previewRuntime && serviceAvailable,
     cloudReason: !previewRuntime ? 'The selected Wine runtime does not include the cloud-save preview.' : !serviceAvailable ? 'This Xodus backend has no xodus-service.' : undefined,
-    vcInstall: protonAvailable,
-    vcReason: protonAvailable ? undefined : 'VC++ installation requires a full Xodus Proton distribution.',
+    ...vcInstallAvailability(process.platform, protonAvailable),
   };
 }
 
@@ -979,7 +979,11 @@ async function prepareGameLaunch(id: string): Promise<void> {
   if (await unbridgedCloudSaveRuntime(wine)) {
     throw new Error('The active runtime has cloud saves without the required service bridge. Update the active runtime in Settings.');
   }
-  const args = gameLaunchArguments(inspected, wine, store.settings.market, backend.current.linuxRunPatch);
+  const executableOverride = game.launchTools?.executable?.trim();
+  if (executableOverride && !await resolvePackageFile(game.path, executableOverride)) {
+    throw new Error(`The custom executable was not found in the game folder: ${executableOverride}. Fix or clear it in the game settings.`);
+  }
+  const args = gameLaunchArguments({ ...inspected, launchTools: game.launchTools }, wine, store.settings.market, backend.current.linuxRunPatch);
   const operationId = `game-${id}`;
   const dataRoot = path.dirname(store.settings.runtimeRoot);
   const logDirectory = path.join(dataRoot, 'logs');
@@ -1061,6 +1065,7 @@ async function prepareGameLaunch(id: string): Promise<void> {
     const environment = antiCheatEnvironment(gameLocaleEnvironment(gameWindowEnvironment(gameLoggingEnvironment(protonRunner
       ? { ...process.env }
       : { ...process.env, WINEPREFIX: legacyPrefixRoot, WINEARCH: 'win64' }, verboseLogs)), locale));
+    if (executableOverride) addGameLog(`Custom executable: launching ${executableOverride} instead of the manifest entry ${inspected.executable ?? '(none)'}.`);
     if (game.launchTools?.offlineWithoutAntiCheat && offlineAntiCheatLaunch(args, environment, inspected.antiCheat?.executable)) {
       addGameLog(`Offline without anti-cheat: launching ${inspected.antiCheat?.executable} with the EOS Null Client. Online features are unavailable.`);
     }

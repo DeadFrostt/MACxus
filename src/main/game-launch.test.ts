@@ -46,3 +46,15 @@ describe('backend compatibility tag', () => {
     }
   });
 });
+
+describe('per-game executable override', () => {
+  it('launches the override instead of the manifest entry and keeps the rest of the policy', () => {
+    const game = { path: '/package', executable: 'Launcher.exe', launchTools: { ...{ mangoHud: false, gamescope: false, gamescopeArgs: '', launchOptions: '' }, executable: 'Binaries/WinGDK/Game-WinGDK-Shipping.exe' } };
+    expect(gameLaunchArguments(game, '/wine', 'US', LINUX_RUN_PATCH))
+      .toEqual(['run', '/package', '/wine', '--exe', 'Binaries/WinGDK/Game-WinGDK-Shipping.exe', '--materialize-chain', '--market', 'US']);
+  });
+  it('falls back to the manifest entry when the override is unset', () => {
+    const game = { path: '/package', executable: 'Launcher.exe', launchTools: { mangoHud: false, gamescope: false, gamescopeArgs: '', launchOptions: '' } };
+    expect(gameLaunchArguments(game, '/wine', '', LINUX_RUN_PATCH)[4]).toBe('Launcher.exe');
+  });
+});

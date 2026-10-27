@@ -69,6 +69,8 @@ For bug reports enable **Settings → Game logging** and attach `~/Library/Appli
 
 ### DLSS
 
+Some games, Unreal Engine titles in particular, start through a small launcher stub that checks for the Microsoft Visual C++ 2015-2022 runtime and stops with a "missing" dialog. Two fixes, both in the game's context menu or settings: **Install / update VC++** puts the official runtime into the game's Wine bottle, and **Launch tools → Custom executable** launches another file inside the game folder instead of the manifest entry (for example `Binaries/WinGDK/<Game>-WinGDK-Shipping.exe`). The custom executable must be one of the package's protected images; a wrong path fails before launch with a clear message.
+
 In a game's settings, **Launch tools → Enable DLSS (CrossOver)** exposes CrossOver's DLSS support for that game. It requires Apple silicon and a compatible game: macOS Tahoe or newer with D3DMetal, Sonoma or newer with DXMT. Select DLSS in the game's graphics settings too. The option is off by default and applies on the next launch; it does not change other games or engines.
 
 ### Controllers
@@ -127,6 +129,8 @@ MACxus rimonta l'immagine a ogni avvio e controlla lo spazio libero prima di ogn
 Per segnalare un bug attiva **Impostazioni → Registrazione dei giochi** e allega `~/Library/Application Support/MACxus/logs/<id>-latest.log` (rileggilo prima).
 
 ### DLSS
+
+Alcuni giochi, soprattutto Unreal Engine, partono da un piccolo eseguibile di avvio che controlla il runtime Microsoft Visual C++ 2015-2022 e si ferma con un avviso di "mancante". Due rimedi, entrambi nel menu contestuale o nelle impostazioni del gioco: **Installa / aggiorna VC++** mette il runtime ufficiale nella bottle Wine del gioco, e **Strumenti di avvio → Eseguibile personalizzato** avvia un altro file dentro la cartella del gioco al posto di quello del manifest (per esempio `Binaries/WinGDK/<Gioco>-WinGDK-Shipping.exe`). L'eseguibile personalizzato deve essere una delle immagini protette del pacchetto; un percorso sbagliato si ferma prima dell'avvio con un messaggio chiaro.
 
 Nelle impostazioni di un gioco, **Strumenti di avvio → Abilita DLSS (CrossOver)** abilita il supporto DLSS di CrossOver per quel gioco. Richiede Apple silicon e un gioco compatibile: macOS Tahoe o successivo con D3DMetal, Sonoma o successivo con DXMT. Seleziona DLSS anche nelle impostazioni grafiche del gioco. L’opzione è disattivata per impostazione predefinita e si applica al prossimo avvio; non modifica gli altri giochi o motori.
 
