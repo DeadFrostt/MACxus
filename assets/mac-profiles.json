@@ -4,18 +4,22 @@
     "env": {
       "D3DM_VENDOR_ID": "0x10de",
       "D3DM_DEVICE_ID": "0x2786",
-      "D3DM_DEVICE_DESCRIPTION": "NVIDIA GeForce RTX 4070"
+      "D3DM_DEVICE_DESCRIPTION": "NVIDIA GeForce RTX 4070",
+      "ROSETTA_ADVERTISE_AVX": "0",
+      "HB_D3D12_TSSHIM": "1"
     },
-    "note": "Profilo da highball-db (CC0)"
+    "note": "Profilo da highball-db (CC0); AVX spento (con AVX esce prima di aprire la finestra); shim d3d12 per SV_ShadingRate su M1"
   },
   "9NR1R1XWLCNB": {
     "engine": "highball",
     "env": {
       "D3DM_VENDOR_ID": "0x10de",
       "D3DM_DEVICE_ID": "0x2786",
-      "D3DM_DEVICE_DESCRIPTION": "NVIDIA GeForce RTX 4070"
+      "D3DM_DEVICE_DESCRIPTION": "NVIDIA GeForce RTX 4070",
+      "ROSETTA_ADVERTISE_AVX": "0",
+      "HB_D3D12_TSSHIM": "1"
     },
-    "note": "Profilo da highball-db (CC0)"
+    "note": "Profilo da highball-db (CC0); AVX spento (con AVX esce prima di aprire la finestra); shim d3d12 per SV_ShadingRate su M1"
   },
   "9N683TDT5M7R": {
     "engine": "crossover-preview",

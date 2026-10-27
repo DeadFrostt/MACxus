@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { existsSync, promises as fs } from 'node:fs';
 import path from 'node:path';
-import { dllOverrideArgs, ensureRuntimeOverrides, installRuntimeDlls, shellQuote, writeRunnerScript, type RuntimeDllSource } from './crossover.js';
+import { fileURLToPath } from 'node:url';
+import { ensureRuntimeOverrides, installRuntimeDlls, shellQuote, writeRunnerScript, type RuntimeDllSource } from './crossover.js';
 import { run } from './process.js';
 import type { ProtonRunner } from './proton.js';
 
@@ -255,8 +256,7 @@ export function highballWrapperScript(engineRoot: string, appleGptkRoot: string,
   return [
     '#!/bin/sh',
     `export WINEPREFIX=${shellQuote(prefix)}`,
-    `export WINEDLLPATH_PREPEND=${shellQuote([...(d3d12Shim ? [path.join(d3d12Shim.dir, 'wine')] : []), path.join(appleGptkRoot, 'wine')].join(':'))}`,
-    ...(d3d12Shim ? [`export HB_D3D12_REAL=${shellQuote(`Z:${d3d12Shim.realDll.replaceAll('/', '\\')}`)}`] : []),
+    `export WINEDLLPATH_PREPEND=${shellQuote(path.join(appleGptkRoot, 'wine'))}`,
     `export CX_D3DMETALPATH=${external}`,
     `export DYLD_FALLBACK_LIBRARY_PATH=${libraryPath}"\${DYLD_FALLBACK_LIBRARY_PATH:-/usr/local/lib:/usr/lib}"`,
     `export DYLD_FALLBACK_FRAMEWORK_PATH=${frameworkPath}"\${DYLD_FALLBACK_FRAMEWORK_PATH:-/Library/Frameworks:/System/Library/Frameworks}"`,
@@ -268,6 +268,15 @@ export function highballWrapperScript(engineRoot: string, appleGptkRoot: string,
     ...Object.entries(defaults).map(([key, value]) => `export ${key}="\${${key}:-${value}}"`),
     // Like CrossOver's wine script: Rosetta advertises AVX for any value, so 0 must unset it.
     'if [ "$ROSETTA_ADVERTISE_AVX" = 0 ]; then unset ROSETTA_ADVERTISE_AVX; fi',
+    // The d3d12 shim goes in front of D3DMetal only for games that ask for it (a profile or
+    // launch options with HB_D3D12_TSSHIM=1): it has been measured on Forza Horizon 6 only.
+    ...(d3d12Shim ? [
+      'if [ "${HB_D3D12_TSSHIM:-0}" != 0 ]; then',
+      `  export WINEDLLPATH_PREPEND=${shellQuote(`${path.join(d3d12Shim.dir, 'wine')}:${path.join(appleGptkRoot, 'wine')}`)}`,
+      `  export HB_D3D12_REAL=${shellQuote(`Z:${d3d12Shim.realDll.replaceAll('/', '\\')}`)}`,
+      '  echo "Shim d3d12 davanti a D3DMetal (HB_D3D12_TSSHIM=1)." >&2',
+      'fi',
+    ] : []),
     'if [ "${1:-}" = "--nexus-stop-prefix" ]; then',
     `  exec ${wineserver} -k`,
     'fi',
@@ -337,6 +346,20 @@ export function patchPeExportName(pe: Buffer, name: string): Buffer {
 }
 
 const SHIM_REAL = 'apd12';
+const BUNDLED_D3D12_SHIM = fileURLToPath(new URL('../../assets/d3d12-shim/d3d12.dll', import.meta.url));
+
+/**
+ * Copies MACxus' build of the shim (assets/d3d12-shim, GPL-3.0, sources beside it) into shimRoot
+ * when it is missing or different. A shim placed there by hand is replaced by the bundled one.
+ */
+export async function installBundledD3D12Shim(shimRoot: string, bundled = BUNDLED_D3D12_SHIM): Promise<void> {
+  const wanted = await readOptional(bundled);
+  if (!wanted) return;
+  const target = path.join(shimRoot, 'wine', 'x86_64-windows', 'd3d12.dll');
+  if ((await readOptional(target))?.equals(wanted)) return;
+  await fs.mkdir(path.dirname(target), { recursive: true });
+  await replaceFile(target, wanted);
+}
 
 /**
  * Lays out the d3d12 shim the way Highball does: D3DMetal's d3d12.dll beside it as apd12.dll,
@@ -454,17 +477,17 @@ export async function prepareHighballRunner(
   }
 
   const changed = await installRuntimeDlls(prefix, runtimeDlls, log);
-  await ensureRuntimeOverrides(prefix, !existed || changed.length > 0, (name) => run(wine, dllOverrideArgs(name), { env }), 'Highball prefix');
+  await ensureRuntimeOverrides(prefix, !existed || changed.length > 0, (args) => run(wine, args, { env }), 'Highball prefix');
   if (engineOverrideDir) await installHighballEngineOverrides(engineRoot, prefix, engineOverrideDir, log);
 
   const runner = path.join(bottlesRoot, RUNNER);
   // The shim serves D3D12 calls D3DMetal does not implement (timestamp queries, shader-model
-  // queries, depth resolves) and corrects APPEND_ALIGNED input-layout offsets. It is on by
-  // default because those hooks only fill gaps; HB_D3D12_TSSHIM=0 in a game's launch options
-  // turns it off. 64-bit atomics are NOT hidden here: hiding them made Halo refuse to start
-  // (Nanite requires the capability), so HB_TSSHIM_NO_ATOMIC64 stays an explicit per-game try.
+  // queries, depth resolves), corrects APPEND_ALIGNED input-layout offsets and makes pixel shaders
+  // that read SV_ShadingRate drawable on GPUs without VRS. The bundled build is laid out for every
+  // Highball launch, and the wrapper uses it when HB_D3D12_TSSHIM=1. 64-bit atomics are NOT hidden:
+  // hiding them made Halo refuse to start (Nanite requires the capability).
+  if (d3d12ShimDir) await installBundledD3D12Shim(d3d12ShimDir);
   const shim = d3d12ShimDir ? await prepareD3D12Shim(d3d12ShimDir, appleGptkRoot) : undefined;
-  if (shim) log(`Shim d3d12 davanti a D3DMetal (disattivabile con HB_D3D12_TSSHIM=0).`);
   await writeRunnerScript(runner, highballWrapperScript(engineRoot, appleGptkRoot, crossOverLib64, prefix, extraEnv, shim));
   return { command: runner, compatibilityDataPath: prefix, stopPrefix: { command: runner, args: ['--nexus-stop-prefix'] } };
 }
