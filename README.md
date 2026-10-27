@@ -30,7 +30,7 @@ MACxus signs in with your Microsoft account, shows your library (owned and Game 
 
 ### Status: beta
 
-Tested on one machine only (MacBook Pro M1 Max, macOS 27.2, CrossOver 26.3). Expect rough edges.
+Developed and mostly tested on one machine (MacBook Pro M1 Max, macOS 27.2, CrossOver 26.3), with a few community reports from M4 and M5 Macs. Expect rough edges.
 
 Working so far: TUNIC, Deep Rock Galactic, Minecraft Dungeons II, Nine Sols, Super Meat Boy 3D, Mad King Redemption, MARVEL Cosmic Invasion, Vampire Survivors, and Space Marine 2 offline. Halo works with M1 glitches; Forza Horizon 6 does not.
 
@@ -91,7 +91,7 @@ MACxus accede con il tuo account Microsoft, mostra la libreria (giochi acquistat
 
 ### Stato: beta
 
-Provato su una sola macchina (MacBook Pro M1 Max, macOS 27.2, CrossOver 26.3). Aspettati qualche spigolo.
+Sviluppato e provato soprattutto su una macchina (MacBook Pro M1 Max, macOS 27.2, CrossOver 26.3), con alcuni resoconti della community da Mac M4 e M5. Aspettati qualche spigolo.
 
 Funzionano finora: TUNIC, Deep Rock Galactic, Minecraft Dungeons II, Nine Sols, Super Meat Boy 3D, Mad King Redemption, MARVEL Cosmic Invasion, Vampire Survivors e Space Marine 2 offline. Halo funziona con glitch su M1; Forza Horizon 6 no.
 
