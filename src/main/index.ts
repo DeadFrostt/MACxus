@@ -335,7 +335,9 @@ async function checkGameUpdates(id?: string): Promise<void> {
   const games = id ? store.games.filter(game => game.id === id) : [...store.games];
   if (id && !games.length) throw new Error('Game not found.');
   let session: XodusServiceSession | undefined;
-  const temporary = await fs.mkdtemp(path.join(os.tmpdir(), 'nexus-updates-'));
+  // The service socket lands four levels below this directory; macOS $TMPDIR is long enough to
+  // push it past the 104-byte sun_path limit (xodus-service panics with exit 101).
+  const temporary = await fs.mkdtemp(path.join(process.platform === 'darwin' ? '/tmp' : os.tmpdir(), 'nexus-updates-'));
   checkingGameUpdates = true;
   gameUpdateController = new AbortController();
   try {
